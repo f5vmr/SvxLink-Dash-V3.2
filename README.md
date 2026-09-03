@@ -10,6 +10,7 @@ SvxLink-Dash-V3.1 provides:
 - EchoLink and METAR module configuration
 - Live reflector activity monitoring
 - DTMF talkgroup control
+- Macro Installation and editing
 - Protected runtime editing environment
 - Hardware and system telemetry
 - Live log viewer
@@ -60,6 +61,7 @@ Protected editing environment with authentication:
 - Talkgroup buttons
 - Monitoring talkgroups
 - EchoLink module
+- Macro Editing
 - METAR module
 - Node information
 
@@ -103,7 +105,7 @@ Tested with:
 
 The installer automatically:
 
-- Downloads SvxLink-Dash-V3.1 into `/opt/dashboard`
+- Downloads SvxLink-Dash-V3.2 into `/opt/dashboard`
 - Installs required Python packages
 - Configures permissions
 - Installs the systemd service
@@ -114,7 +116,7 @@ Run:
 
 ```bash
 cd /tmp
-wget https://raw.githubusercontent.com/f5vmr/SvxLink-Dash-V3.1/main/install/install-dashboard.sh
+wget https://raw.githubusercontent.com/f5vmr/SvxLink-Dash-V3.2/main/install/install-dashboard.sh
 chmod +x install-dashboard.sh
 sudo ./install-dashboard.sh
 ```
@@ -453,7 +455,7 @@ exists and is writable by user `svxlink`.
 
 # Reflector Protocol Notice
 
-SvxLink-Dash-V3.1 is written primarily for the following SvxReflector Protocol 2 networks running SvxLink Version 25:
+SvxLink-Dash-V3.2 is written primarily for the following SvxReflector Protocol 2 networks running SvxLink Version 26.05.1: 
 
 - UKWide
 - North America
@@ -488,11 +490,11 @@ This may be added in future versions.
 
 # Credits
 
-SvxLink Software: Version 26.05
+SvxLink Software: Version 26.05.1
 
 Tobias Blömberg SM0SVX
 
-Version 3.1
+Version 3.2
 
 was developed by Chris Jackson, G4NAB.
 Additional assistance with Python, Flask, configuration rendering,
