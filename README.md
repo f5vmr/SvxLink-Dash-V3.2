@@ -588,6 +588,83 @@ Different local port groups may be configured on a case-by-case basis, subject t
 
 Connecting different ports to multiple independent reflectors is outside the current scope.
 
+## User-Defined Local Links
+
+Multi-port local links are defined by the operator according to the requirements of the individual installation.
+
+The configuration workflow will provide an example based on the standard SvxLink link structure:
+
+```ini
+[LinkToR4]
+CONNECT_LOGICS=RepeaterLogic1:94:SK3AB,SimplexLogic2:92:SK3CD
+#DEFAULT_ACTIVE=1
+TIMEOUT=300
+#ACTIVATE_ON_ACTIVITY=RepeaterLogic1
+#ACTIVATE_ON_TG=SimplexLogic2:240.*
+```
+
+The operator may define:
+
+* The link section name.
+* The available radio ports participating in the link.
+* The DTMF command assigned to each participating logic.
+* The identification or announcement label associated with each logic.
+* Whether the link is active by default.
+* The link timeout.
+* Any supported activity or talkgroup activation conditions.
+
+The configuration workflow generates the appropriate SimplexLogic or RepeaterLogic section names from the selected ports.
+
+The operator remains responsible for deciding the intended operational connectivity of each local link.
+
+The configuration workflow remains responsible for:
+
+* Rejecting references to ports that are not enabled.
+* Rejecting duplicate or invalid link section names.
+* Rejecting a link containing fewer than two radio logics.
+* Preventing a radio port from belonging to more than one link.
+* Preventing a port assigned to the reflector link from also belonging to a local link.
+* Presenting the resulting topology for review before configuration is built.
+
+A local link may subsequently be replaced or reconfigured through the dashboard reconfiguration menu.
+
+## Reconfiguration Behaviour
+
+The initial configuration workflow and dashboard reconfiguration workflow follow different return paths.
+
+During initial setup, the operator progresses through the complete sequence:
+
+```text
+Configure local node or ports
+→ Configure link topology and reflector access
+→ Review complete configuration
+→ Build and deploy
+```
+
+When an existing setting is opened through the dashboard reconfiguration menu, saving that setting must return directly to the Build page.
+
+The operator must not be sent through the remaining initial-setup pages.
+
+This preserves the established SvxLink-Dash-V3.2 reconfiguration behaviour:
+
+```text
+Dashboard
+→ Reconfiguration menu
+→ Selected configuration page
+→ Build
+→ Deploy updated configuration
+```
+
+This direct return applies to changes involving:
+
+* Local link topology.
+* Reflector selection.
+* Reflector authentication.
+* Ports participating in the reflector link.
+* Other existing configuration pages opened through reconfiguration.
+
+The Build page remains the common point at which the revised model is rendered, reviewed and deployed.
+
 ---
 
 # Reflector Protocol Notice
