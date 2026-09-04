@@ -1062,24 +1062,45 @@ def get_dtmf_ctrl_pty(model):
 # =========================================================
 def get_primary_callsign(model):
     """
-    Return the best callsign for shared/global config sections.
-    For multi-port builds, use the first enabled port callsign.
+    Return the callsign representing the installation as a whole.
+
+    Multi-port installations use the explicitly selected primary port.
+    Older models fall back to the first enabled port with a callsign.
+    Single-port installations use the configured node callsign.
     """
 
-    enabled_ports = model.get("ports", {}).get("enabled", [])
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
     nodes = model.get("nodes", {})
 
-    for port in enabled_ports:
-        node = nodes.get(str(port), {})
-        callsign = node.get("callsign")
-        if callsign:
-            return callsign
+    primary_port_id = str(
+        model.get("installation", {}).get("primary_port_id") or ""
+    )
 
-    return (
+    if primary_port_id in enabled_ports:
+        primary_callsign = (
+            nodes.get(primary_port_id, {}).get("callsign")
+        )
+
+        if primary_callsign:
+            return str(primary_callsign).strip().upper()
+
+    for port_id in enabled_ports:
+        callsign = nodes.get(port_id, {}).get("callsign")
+
+        if callsign:
+            return str(callsign).strip().upper()
+
+    callsign = (
         model.get("node", {}).get("callsign")
         or model.get("ident", {}).get("callsign")
         or "NOCALL"
     )
+
+    return str(callsign).strip().upper()
 def render_reflector_logic(model):
     """
     Render ReflectorLogic section if enabled.

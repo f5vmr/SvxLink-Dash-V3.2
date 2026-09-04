@@ -183,7 +183,7 @@ def deploy_motd_script(content):
 
 def deploy_node_info(model):
     node_info = {
-        "callsign": model.get("node", {}).get("callsign"),
+        "callsign": get_primary_callsign(model),
         "type": model.get("node", {}).get("type"),
         "platform": model.get("platform", {}).get("name"),
         "reflector": model.get("reflector", {}).get("name"),
