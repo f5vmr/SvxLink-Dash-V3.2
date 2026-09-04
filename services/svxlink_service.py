@@ -20,6 +20,7 @@ import grp
 import re
 from pathlib import Path
 from datetime import datetime
+from models.node_model import get_installation_tones
 
 
 
@@ -256,12 +257,7 @@ def apply_courtesy_tone(model):
     """
     Modify local Logic.tcl according to selected courtesy tone.
 
-    Uses:
-    - model["courtesy"]["mode"]
-    - model["courtesy"]["frequency"]
-    - model["cw"]["amp"]
-    - model["cw"]["pitch"]
-    - model["cw"]["cpm"]
+    Uses the installation-wide tone settings from model["tones"].
 
     The local Logic.tcl file is managed output, so no backup is made here.
     """
@@ -271,11 +267,10 @@ def apply_courtesy_tone(model):
     if not logic_tcl.exists():
         raise FileNotFoundError(f"Logic.tcl not found: {logic_tcl}")
 
-    courtesy = model.get("courtesy", {})
-    #cw = model.get("cw", {})
+    tones = get_installation_tones(model)
 
-    mode = courtesy.get("mode", "none")
-    tone_freq = courtesy.get("frequency", 800)
+    mode = tones["courtesy_mode"]
+    tone_freq = tones["courtesy_frequency"]
 
     # cw_amp = cw.get("amp", -10)
     # cw_pitch = cw.get("pitch", 650)
@@ -319,10 +314,10 @@ def apply_repeater_event_customisations(model):
     Modify local RepeaterLogicType.tcl according to repeater tone choices.
     """
 
-    repeater = model.get("repeater", {})
+    tones = get_installation_tones(model)
 
-    idle_tone = repeater.get("idle_tone", "chime")
-    down_tone = repeater.get("down_tone", "biboop")
+    idle_tone = tones["idle_mode"]
+    down_tone = tones["closedown_mode"]
 
     logic_tcl = LOGIC_DIR_DST / "RepeaterLogicType.tcl"
 

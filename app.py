@@ -50,7 +50,7 @@ from services.model_store import (
     load_node_model,
     save_node_model,
 )
-
+from models.node_model import get_installation_tones
 ## Wifi
 from services.wifi_service import (
     wifi_scan,
@@ -1817,7 +1817,7 @@ def port_cw_page():
         if request.form.get("reconfigure") == "1":
             return redirect(url_for("build_page"))
 
-        return redirect(url_for("port_courtesy_page"))
+        return redirect(url_for("courtesy_page"))
 
     return render_template(
         "port_cw.html",
@@ -1828,78 +1828,24 @@ def port_cw_page():
     )
 @app.route("/port-courtesy", methods=["GET", "POST"])
 def port_courtesy_page():
-    model = load_node_model()
+    """
+    Compatibility redirect for older multi-port workflow links.
+    """
 
-    hardware = model.get("hardware", {})
-    nodes = model.get("nodes", {})
-    enabled_ports = model.get("ports", {}).get("enabled", [])
-    if not is_multiport_build(model):
-        return redirect(url_for("courtesy_page"))
-    if not nodes:
-        return redirect(url_for("port_config_page"))
-
-    enabled_port_ids = [
-        str(port)
-        for port in enabled_ports
-    ]
-
-    if request.method == "POST":
-        for port_id in enabled_port_ids:
-            node = nodes.get(port_id, {})
-            role = node.get("role", "simplex")
-
-            courtesy_mode = request.form.get(
-                f"port_{port_id}_courtesy_mode",
-                "none"
-            ).strip()
-
-            idle_tone = request.form.get(
-                f"port_{port_id}_idle_tone",
-                "none"
-            ).strip()
-
-            down_tone = request.form.get(
-                f"port_{port_id}_down_tone",
-                "none"
-            ).strip()
-
-            if courtesy_mode not in ("none", "beep", "morse_k", "morse_t"):
-                courtesy_mode = "none"
-
-            if idle_tone not in ("none", "pip", "chime"):
-                idle_tone = "none"
-
-            if down_tone not in ("none", "biboop", "va"):
-                down_tone = "none"
-
-            node["courtesy"] = {
-                "mode": courtesy_mode,
-                "idle_tone": idle_tone,
-                "down_tone": down_tone,
-            }
-
-            node["courtesy_configured"] = True
-            nodes[port_id] = node
-
-        model["nodes"] = nodes
-
-        model.setdefault("build", {})
-        model["build"]["port_courtesy_configured"] = True
-
-        save_node_model(model)
-
-        if request.form.get("reconfigure") == "1":
-            return redirect(url_for("build_page"))
-
-        return redirect(url_for("port_repeater_page"))
-
-    return render_template(
-        "port_courtesy.html",
-        model=model,
-        nodes=nodes,
-        enabled_ports=enabled_ports,
-        version_info=get_version_info(),
+    reconfigure = (
+        request.args.get("reconfigure") == "1"
+        or request.form.get("reconfigure") == "1"
     )
+
+    if reconfigure:
+        return redirect(
+            url_for(
+                "courtesy_page",
+                reconfigure="1",
+            )
+        )
+
+    return redirect(url_for("courtesy_page"))
 @app.route("/port-repeater", methods=["GET", "POST"])
 def port_repeater_page():
     model = load_node_model()
@@ -2080,7 +2026,6 @@ def port_final_review_page():
         "squelch_configured",
         "ident_configured",
         "cw_configured",
-        "courtesy_configured",
         "repeater_configured",
     ]
 
@@ -2096,7 +2041,12 @@ def port_final_review_page():
                     "node": node,
                     "missing": flag,
                 })
-
+    if not model.get("build", {}).get("tones_configured"):
+        incomplete.append({
+            "port_id": None,
+            "node": {},
+            "missing": "tones_configured",
+        })
     if request.method == "POST":
         if incomplete:
             return redirect(url_for("port_final_review_page"))
@@ -2637,52 +2587,111 @@ def courtesy_page():
     model = load_node_model()
     error = None
 
-    if "courtesy" not in model:
-        model["courtesy"] = {
-            "mode": "none",
-            "frequency": 800,
-        }
+    multiport = is_multiport_build(model)
 
-    node_type = model.get("node", {}).get("type", "simplex")
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    nodes = model.get("nodes", {})
+
+    has_repeater = (
+        model.get("node", {}).get("type") == "repeater"
+        or any(
+            nodes.get(port_id, {}).get("role") == "repeater"
+            for port_id in enabled_ports
+        )
+    )
+
+    tones = get_installation_tones(model)
 
     if request.method == "POST":
-        courtesy_mode = request.form.get("courtesy_mode", "").strip()
-        tone_freq = request.form.get("tone_freq", "800").strip()
+        courtesy_mode = request.form.get(
+            "courtesy_mode",
+            "",
+        ).strip()
 
-        if not courtesy_mode:
-            error = "Please select a courtesy tone."
+        tone_frequency_text = request.form.get(
+            "tone_frequency",
+            "800",
+        ).strip()
 
-        elif node_type == "repeater" and courtesy_mode == "none":
-            error = "Repeater systems require a courtesy tone."
+        idle_mode = request.form.get(
+            "idle_mode",
+            "",
+        ).strip()
 
-        elif courtesy_mode not in ("none", "beep", "morse_t", "morse_k"):
-            error = "Invalid courtesy tone selection."
+        closedown_mode = request.form.get(
+            "closedown_mode",
+            "",
+        ).strip()
+
+        if courtesy_mode not in (
+            "none",
+            "beep",
+            "morse_t",
+            "morse_k",
+        ):
+            error = "Please select a valid courtesy tone."
+
+        elif idle_mode not in (
+            "chime",
+            "pip",
+            "silence",
+        ):
+            error = "Please select a valid idle tone."
+
+        elif closedown_mode not in (
+            "none",
+            "biboop",
+            "va",
+        ):
+            error = "Please select a valid closedown tone."
 
         else:
             try:
-                tone_freq = int(tone_freq)
+                tone_frequency = int(tone_frequency_text)
             except ValueError:
-                tone_freq = 800
-
-            if tone_freq < 300 or tone_freq > 3000:
-                error = "Beep frequency must be between 300 and 3000 Hz."
+                error = "Courtesy beep frequency must be numeric."
             else:
-                model["courtesy"] = {
-                    "mode": courtesy_mode,
-                    "frequency": tone_freq,
-                }
+                if tone_frequency < 300 or tone_frequency > 3000:
+                    error = (
+                        "Courtesy beep frequency must be between "
+                        "300 and 3000 Hz."
+                    )
+                else:
+                    model["tones"] = {
+                        "courtesy_mode": courtesy_mode,
+                        "courtesy_frequency": tone_frequency,
+                        "idle_mode": idle_mode,
+                        "closedown_mode": closedown_mode,
+                    }
 
-                save_node_model(model)
-                if request.form.get("reconfigure") == "1":
-                    return redirect(url_for("build_page"))
-                if model.get("node", {}).get("type") == "repeater":
-                    return redirect(url_for("repeater_page"))
-                return redirect(url_for("modules_page"))
+                    model.setdefault("build", {})
+                    model["build"]["tones_configured"] = True
+
+                    save_node_model(model)
+
+                    if request.form.get("reconfigure") == "1":
+                        return redirect(url_for("build_page"))
+
+                    if multiport:
+                        return redirect(url_for("port_repeater_page"))
+
+                    if has_repeater:
+                        return redirect(url_for("repeater_page"))
+
+                    return redirect(url_for("modules_page"))
 
     return render_template(
         "courtesy.html",
         model=model,
+        tones=tones,
+        has_repeater=has_repeater,
+        is_multiport=multiport,
         error=error,
+        version_info=get_version_info(),
     )
 @app.route("/repeater", methods=["GET", "POST"])
 def repeater_page():
@@ -2728,12 +2737,10 @@ def repeater_page():
                 error = "Online control command must be six digits and begin with 3, 4, 5, 6, or 7."
 
             else:
-                model["repeater"] = {
-                    "idle_timeout": idle_timeout,
-                    "sql_timeout": sql_timeout,
-                    "idle_tone": request.form.get("idle_tone", "chime"),
-                    "down_tone": request.form.get("down_tone", "biboop"),
-                }
+                repeater = model.setdefault("repeater", {})
+                repeater["idle_timeout"] = idle_timeout
+                repeater["sql_timeout"] = sql_timeout
+                model["repeater"] = repeater
 
                 model["online_control"] = {
                     "enabled": online_enabled,
@@ -4185,12 +4192,6 @@ def reconfigure_page():
                 "route": "cw_page",
                 "description": "Change CW pitch, speed, and level settings.",
             },
-            {
-                "id": "courtesy",
-                "label": "Courtesy Tones",
-                "route": "courtesy_page",
-                "description": "Change courtesy tone settings.",
-            },
         ])
 
         if model.get("node", {}).get("type") == "repeater":
@@ -4207,7 +4208,15 @@ def reconfigure_page():
             "route": "review_page",
             "description": "Review the current model before rebuilding.",
         })
-
+    reconfigure_targets.append({
+        "id": "tones",
+        "label": "Installation Tones",
+        "route": "courtesy_page",
+        "description": (
+            "Change the shared courtesy, idle and closedown "
+            "tone settings."
+        ),
+    })
     reconfigure_targets.extend([
         {
             "id": "build",

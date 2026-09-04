@@ -3,7 +3,7 @@
 """
 Primary SvxLink configuration renderer for SvxLink-Dash-V3.1.
 """
-
+from models.node_model import get_installation_tones
 from renderers.template_engine import render_config_template
 import platform
 
@@ -584,6 +584,7 @@ def render_active_logic(model):
     )
     short_ident = model.get("ident", {}).get("short", {})
     long_ident = model.get("ident", {}).get("long", {})
+    tones = get_installation_tones(model)
 
     values = {
         "LOGIC_NAME": logic_name,
@@ -623,8 +624,9 @@ def render_active_logic(model):
 
         "DEFAULT_LANG": get_default_language(model),
 
-        "RGR_SOUND_ALWAYS": model.get("courtesy", {}).get("mode") != "none" and 1 or 0,
-
+        "RGR_SOUND_ALWAYS": (
+            1 if tones["courtesy_mode"] != "none" else 0
+        ),
         "REPORT_CTCSS_LINE": render_report_ctcss(model),
         "TX_CTCSS_LINE": render_tx_ctcss_logic(model),
 
@@ -664,7 +666,7 @@ def render_port_logic(model, port_id, node):
     long_ident = ident.get("long", {})
 
     cw = node.get("cw", {})
-    courtesy = node.get("courtesy", {})
+    tones = get_installation_tones(model)
     repeater = node.get("repeater", {})
 
     values = {
@@ -695,7 +697,9 @@ def render_port_logic(model, port_id, node):
 
         "DEFAULT_LANG": get_default_language(model),
 
-        "RGR_SOUND_ALWAYS": 1 if courtesy.get("mode", "none") != "none" else 0,
+        "RGR_SOUND_ALWAYS": (
+            1 if tones["courtesy_mode"] != "none" else 0
+        ),
 
         "REPORT_CTCSS_LINE": render_port_report_ctcss(node),
         "TX_CTCSS_LINE": render_port_tx_ctcss_logic(node),

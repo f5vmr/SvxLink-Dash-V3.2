@@ -31,7 +31,7 @@
 
         <div class="form-section">
             <div class="label">Enabled port summary</div>
-                
+
             <div class="review-grid">
                 {% for port in enabled_ports %}
                     {% set port_id = port|string %}
@@ -41,11 +41,10 @@
                     {% set modules = node.get("modules", {}) %}
                     {% set ident = node.get("ident", {}) %}
                     {% set cw = node.get("cw", {}) %}
-                    {% set courtesy = node.get("courtesy", {}) %}
                     {% set repeater = node.get("repeater", {}) %}
                     {% set squelch = node.get("squelch", {}) %}
                     {% set role = node.get("role", "unknown") %}
-            
+
                     <article class="review-card">
                         <h2 class="review-card-title">
                             {{ node.get("name", "Port " ~ port_id) }}
@@ -53,7 +52,7 @@
                         <p class="review-card-subtitle">
                             Port {{ port_id }} · {{ role|title }}
                         </p>
-                    
+
                         <div class="review-section">
                             <h3 class="review-section-title">Node</h3>
                             <div class="review-row">
@@ -65,7 +64,7 @@
                                 <span class="review-value">{{ role|title }}</span>
                             </div>
                         </div>
-                    
+
                         <div class="review-section">
                             <h3 class="review-section-title">Audio</h3>
                             <div class="review-row">
@@ -77,7 +76,7 @@
                                 <span class="review-value">{{ audio.get("tx_audio", "Not set") }}</span>
                             </div>
                         </div>
-                    
+
                         <div class="review-section">
                             <h3 class="review-section-title">GPIO / Control</h3>
                             <div class="review-row">
@@ -89,7 +88,7 @@
                                 <span class="review-value">{{ gpio.get("ptt", "Not set") }}</span>
                             </div>
                         </div>
-                    
+
                         <div class="review-section">
                             <h3 class="review-section-title">Squelch / CTCSS</h3>
                             <div class="review-row">
@@ -105,7 +104,7 @@
                                 <span class="review-value">{{ squelch.get("ctcss_freq", "Not set") }}</span>
                             </div>
                         </div>
-                    
+
                         <div class="review-section">
                             <h3 class="review-section-title">Modules</h3>
                             <div class="review-row">
@@ -121,7 +120,7 @@
                                 </span>
                             </div>
                         </div>
-                    
+
                         <div class="review-section">
                             <h3 class="review-section-title">Identification</h3>
                             <div class="review-row">
@@ -157,7 +156,7 @@
                                 <span class="review-value">{{ ident.get("long", {}).get("announce_enable", false) }}</span>
                             </div>
                         </div>
-                    
+
                         <div class="review-section">
                             <h3 class="review-section-title">CW</h3>
                             <div class="review-row">
@@ -173,23 +172,7 @@
                                 <span class="review-value">{{ cw.get("cpm", 95) }} CPM</span>
                             </div>
                         </div>
-                    
-                        <div class="review-section">
-                            <h3 class="review-section-title">Courtesy</h3>
-                            <div class="review-row">
-                                <span class="review-label">Tone</span>
-                                <span class="review-value">{{ courtesy.get("mode", "none") }}</span>
-                            </div>
-                            <div class="review-row">
-                                <span class="review-label">Idle tone</span>
-                                <span class="review-value">{{ courtesy.get("idle_tone", "none") }}</span>
-                            </div>
-                            <div class="review-row">
-                                <span class="review-label">Close tone</span>
-                                <span class="review-value">{{ courtesy.get("down_tone", "none") }}</span>
-                            </div>
-                        </div>
-                    
+
                         {% if role == "repeater" %}
                             <div class="review-section">
                                 <h3 class="review-section-title">Repeater</h3>
@@ -207,7 +190,7 @@
                                 </div>
                             </div>
                         {% endif %}
-                        
+
                         <div class="review-section">
                             <h3 class="review-section-title">Completion</h3>
                             <div class="review-row">
@@ -234,12 +217,7 @@
                                     {{ node.get("cw_configured", false) }}
                                 </span>
                             </div>
-                            <div class="review-row">
-                                <span class="review-label">Courtesy</span>
-                                <span class="review-value {% if node.get("courtesy_configured", false) %}review-badge-ok{% else %}review-badge-warn{% endif %}">
-                                    {{ node.get("courtesy_configured", false) }}
-                                </span>
-                            </div>
+
                             <div class="review-row">
                                 <span class="review-label">Repeater</span>
                                 <span class="review-value {% if node.get("repeater_configured", false) %}review-badge-ok{% else %}review-badge-warn{% endif %}">
@@ -251,7 +229,7 @@
                 {% endfor %}
             </div>
         </div>
-        
+
         <form action="{{ url_for('port_profile_review_page') }}" method="post">
             <div class="button-row">
                 <a class="button-secondary" href="{{ url_for('port_config_page') }}">Back</a>

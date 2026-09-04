@@ -341,66 +341,33 @@ def validate_model(model):
         elif interval < 1:
             errors.append(f"{ident_name} ident interval must be at least 1 minute.")
 
-    enabled_ports = [
-        str(port)
-        for port in model.get("ports", {}).get("enabled", [])
-    ]
+    tones = get_installation_tones(model)
 
-    is_multiport = multiport
+    courtesy_mode = tones["courtesy_mode"]
+    courtesy_frequency = tones["courtesy_frequency"]
+    idle_mode = tones["idle_mode"]
+    closedown_mode = tones["closedown_mode"]
+
+    if courtesy_mode not in SUPPORTED_ROGER_MODES:
+        errors.append("Courtesy tone mode is invalid.")
+
+    if (
+        not isinstance(courtesy_frequency, int)
+        or isinstance(courtesy_frequency, bool)
+        or courtesy_frequency < 300
+        or courtesy_frequency > 3000
+    ):
+        errors.append(
+            "Courtesy beep frequency must be between 300 and 3000 Hz."
+        )
+
+    if idle_mode not in SUPPORTED_IDLE_TONES:
+        errors.append("Idle tone mode is invalid.")
+
+    if closedown_mode not in SUPPORTED_DOWN_TONES:
+        errors.append("Close-down tone mode is invalid.")
     
-    if is_multiport:
-        nodes = model.get("nodes", {})
-
-        for port_id in enabled_ports:
-            port_node = nodes.get(port_id, {})
-            role = port_node.get("role", "simplex")
-            courtesy = port_node.get("courtesy", {})
-            roger_mode = courtesy.get("mode", "none")
-
-            if roger_mode not in SUPPORTED_ROGER_MODES:
-                errors.append(
-                    f"Port {port_id}: roger tone mode is invalid."
-                )
-
-            if role == "repeater" and roger_mode == "none":
-                errors.append(
-                    f"Port {port_id}: repeater mode requires a roger tone."
-                )
-
-            if role == "repeater":
-                idle_tone = courtesy.get("idle_tone", "none")
-                down_tone = courtesy.get("down_tone", "none")
-
-                if idle_tone not in SUPPORTED_IDLE_TONES:
-                    errors.append(
-                        f"Port {port_id}: idle tone mode is invalid."
-                    )
-
-                if down_tone not in SUPPORTED_DOWN_TONES:
-                    errors.append(
-                        f"Port {port_id}: close-down tone mode is invalid."
-                    )
-
-    else:
-        roger_mode = model.get("courtesy", {}).get("mode")
-
-        if roger_mode not in SUPPORTED_ROGER_MODES:
-            errors.append("Roger tone mode is invalid.")
-
-        if node_type == "repeater" and roger_mode == "none":
-            errors.append("Repeater mode requires a roger tone.")
-
-        if node_type == "repeater":
-            idle_tone = model.get("repeater", {}).get("idle_tone")
-            down_tone = model.get("repeater", {}).get("down_tone")
-
-            if idle_tone not in SUPPORTED_IDLE_TONES:
-                errors.append("Idle tone mode is invalid.")
-
-            if down_tone not in SUPPORTED_DOWN_TONES:
-                errors.append("Close-down tone mode is invalid.")
-    
-    if not multiport:            
+    if not multiport:
         interface_mode = model.get("interface", {}).get("mode")
 
         if interface_mode not in SUPPORTED_INTERFACE_MODES:
@@ -477,15 +444,56 @@ def set_ident(model, short_mode, short_interval, long_mode, long_interval):
 
     return model
 
+def get_installation_tones(model):
+    """
+    Return normalised installation-wide tone settings.
+
+    Legacy single-port values are used only when the version 2 tone
+    structure is absent.
+    """
+
+    tones = model.get("tones")
+
+    if isinstance(tones, dict):
+        return {
+            "courtesy_mode": tones.get("courtesy_mode", "none"),
+            "courtesy_frequency": tones.get(
+                "courtesy_frequency",
+                800,
+            ),
+            "idle_mode": tones.get("idle_mode", "chime"),
+            "closedown_mode": tones.get(
+                "closedown_mode",
+                "biboop",
+            ),
+        }
+
+    courtesy = model.get("courtesy", {})
+    repeater = model.get("repeater", {})
+
+    idle_mode = repeater.get("idle_tone", "chime")
+
+    if idle_mode == "none":
+        idle_mode = "silence"
+
+    return {
+        "courtesy_mode": courtesy.get("mode", "none"),
+        "courtesy_frequency": courtesy.get("frequency", 800),
+        "idle_mode": idle_mode,
+        "closedown_mode": repeater.get(
+            "down_tone",
+            "biboop",
+        ),
+    }
 
 def set_roger(model, roger_mode):
     """
-    Set roger tone mode.
-
-    Repeater enforcement is validated separately.
+    Set the installation-wide courtesy tone mode.
     """
 
-    model["courtesy"]["mode"] = roger_mode
+    model.setdefault("tones", {})
+    model["tones"]["courtesy_mode"] = roger_mode
+
     return model
 
 def set_interface_mode(model, mode):

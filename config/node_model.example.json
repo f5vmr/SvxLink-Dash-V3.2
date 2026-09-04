@@ -1,7 +1,10 @@
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "build": {
         "intent": "single_channel"
+    },
+    "installation": {
+        "primary_port_id": null
     },
     "platform": {
         "id": "raspberry_pi",
@@ -20,10 +23,50 @@
     },
     "reflector": {
         "enabled": false,
+        "route": "none",
         "name": null,
         "host": null,
         "port": null,
-        "auth_key": null
+        "auth_key": null,
+        "federation": {
+            "network_id": null,
+            "auth_key": null
+        },
+        "v2": {
+            "name": null,
+            "host": null,
+            "port": null,
+            "auth_key": null,
+            "default_tg": 0,
+            "monitor_tgs": []
+        },
+        "v3": {
+            "name": null,
+            "host": null,
+            "port": null,
+            "default_tg": 0,
+            "monitor_tgs": [],
+            "subject": {
+                "given_name": null,
+                "surname": null,
+                "organizational_unit": null,
+                "organization": null,
+                "locality": null,
+                "state_or_province": null,
+                "country": null,
+                "email": null
+            }
+        }
+    },
+    "topology": {
+        "reflector_link": {
+            "name": "LinkToReflector",
+            "ports": [],
+            "default_active": true,
+            "timeout": 300
+        },
+        "local_links": [],
+        "independent_ports": []
     },
     "ident": {
         "short": {
@@ -78,12 +121,13 @@
         "enabled": false,
         "command": null
     },
-    "courtesy": {
-        "mode": "none"
+    "tones": {
+        "courtesy_mode": "none",
+        "courtesy_frequency": 800,
+        "idle_mode": "chime",
+        "closedown_mode": "biboop"
     },
     "repeater": {
-        "idle_tone": "chime",
-        "down_tone": "biboop",
         "idle_timeout": 10,
         "sql_timeout": 180
     },

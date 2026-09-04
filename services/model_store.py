@@ -208,6 +208,9 @@ def migrate_node_model(model):
         "closedown_mode": closedown_mode,
     }
 
+    model.setdefault("build", {})
+    model["build"]["tones_configured"] = True
+
     reflector_enabled = bool(
         legacy_reflector.get("enabled")
     )

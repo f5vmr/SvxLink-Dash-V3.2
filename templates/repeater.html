@@ -17,7 +17,7 @@
 
             <div class="page-heading">
                 <h1>Repeater Settings</h1>
-                <p>Set repeater timing and optional DTMF online control.</p>
+                <p>Set repeater timing and optional DTMF online control. Installation-wide tones are configured on the preceding page.</p>
             </div>
         </div>
 
@@ -43,36 +43,6 @@
                 <div class="note">
                     Seconds the repeater remains up after SQL closes. Default 10. Longer than 20 is not recommended.
                 </div>
-            </div>
-            <div class="field-group">
-                {% set repeater = model.get("repeater", {}) %}
-                {% set idle_tone = repeater.get("idle_tone", "chime") %}
-
-                        
-                <label class="label">Repeater Idle Tone</label>
-                        
-                <select class="input-field" name="idle_tone">
-                    <option value="chime" {% if idle_tone == 'chime' %}selected{% endif %}>Chime</option>
-                    <option value="pip" {% if idle_tone == 'pip' %}selected{% endif %}>Pip</option>
-                    <option value="silence" {% if idle_tone == 'silence' %}selected{% endif %}>None</option>
-                </select>
-            
-                <div class="note">
-                    This is the tone played while the repeater is idle.
-                </div>
-
-            </div>            
-            <div class="field-group">
-                {% set repeater = model.get("repeater", {}) %}
-                {% set down_tone = repeater.get("down_tone", "biboop") %}
-
-                <label class="label">Repeater shutoff tone</label>
-
-                <select class="input-field" name="down_tone">
-                    <option value="none" {% if down_tone == 'none' %}selected{% endif %}>None</option>
-                    <option value="biboop" {% if down_tone == 'biboop' %}selected{% endif %}>Biboop</option>
-                    <option value="va" {% if down_tone == 'va' %}selected{% endif %}>VA</option>
-                </select>
             </div>
             <div class="field-group">
                 <label class="label" for="sql_timeout">SQL timeout</label>

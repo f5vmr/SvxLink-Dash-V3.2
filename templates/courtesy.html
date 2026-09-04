@@ -2,32 +2,56 @@
 <html lang="en" class="light-theme">
 <head>
     <meta charset="UTF-8">
-    <title>Courtesy Tone</title>
+    <title>Installation Tones</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='svxlink.ico') }}">
 </head>
 <body>
 <main class="page">
     <section class="card">
-
         <div class="page-header">
             <img class="page-icon"
                  src="{{ url_for('static', filename='svxlink.ico') }}"
                  alt="SvxLink icon">
 
             <div class="page-heading">
-                <h1>Courtesy Tone</h1>
-                <p>Select the courtesy tone behaviour for this node.</p>
-            
-                <div class="note">
-                {% if model.node.type == "repeater" %}
-                    Repeater systems require a courtesy tone.
-                {% else %}
-                    Courtesy tones are optional for simplex systems.
-                {% endif %}
-                </div>
+                <h1>Installation Tones</h1>
+                <p>
+                    Select the shared courtesy, idle and closedown
+                    tone behaviour for this installation.
+                </p>
             </div>
         </div>
+
+        <div class="note">
+            These settings are installation-wide because SvxLink produces
+            them through shared event-handling files. They cannot be
+            configured independently for individual radio ports.
+        </div>
+
+        {% if has_repeater %}
+            <div class="info-box">
+                <h3>Repeater operation</h3>
+                <p>
+                    A courtesy tone is normally recommended for repeater
+                    operation, but it is not mandatory. Select None if no
+                    courtesy tone is wanted.
+                </p>
+                <p>
+                    The idle and closedown choices apply to every repeater
+                    logic in this installation.
+                </p>
+            </div>
+        {% else %}
+            <div class="info-box">
+                <h3>Simplex operation</h3>
+                <p>
+                    Courtesy tones are optional for simplex operation.
+                    Idle and closedown settings are retained in case a
+                    repeater port is added later.
+                </p>
+            </div>
+        {% endif %}
 
         {% if error %}
             <p class="error">{{ error }}</p>
@@ -37,85 +61,130 @@
             {% if request.args.get("reconfigure") == "1" %}
                 <input type="hidden" name="reconfigure" value="1">
             {% endif %}
-            <div class="field-group">
-                <label class="label">Tone type</label>
 
-                <div class="checkbox-row">
+            <div class="form-section">
+                <div class="label">Courtesy tone</div>
+
+                <div class="radio-row">
                     <input type="radio"
                            id="courtesy_none"
                            name="courtesy_mode"
                            value="none"
-                           {% if model.courtesy.mode == "none" %}checked{% endif %}>
+                           {% if tones.courtesy_mode == "none" %}checked{% endif %}>
                     <label for="courtesy_none">None</label>
                 </div>
 
-                <div class="checkbox-row">
+                <div class="radio-row">
                     <input type="radio"
                            id="courtesy_beep"
                            name="courtesy_mode"
                            value="beep"
-                           {% if model.courtesy.mode == "beep" %}checked{% endif %}>
+                           {% if tones.courtesy_mode == "beep" %}checked{% endif %}>
                     <label for="courtesy_beep">Beep</label>
                 </div>
 
-                <div class="checkbox-row">
+                <div class="radio-row">
                     <input type="radio"
                            id="courtesy_morse_t"
                            name="courtesy_mode"
                            value="morse_t"
-                           {% if model.courtesy.mode == "morse_t" %}checked{% endif %}>
+                           {% if tones.courtesy_mode == "morse_t" %}checked{% endif %}>
                     <label for="courtesy_morse_t">Morse T</label>
                 </div>
 
-                <div class="checkbox-row">
+                <div class="radio-row">
                     <input type="radio"
                            id="courtesy_morse_k"
                            name="courtesy_mode"
                            value="morse_k"
-                           {% if model.courtesy.mode == "morse_k" %}checked{% endif %}>
+                           {% if tones.courtesy_mode == "morse_k" %}checked{% endif %}>
                     <label for="courtesy_morse_k">Morse K</label>
                 </div>
             </div>
 
             <div class="field-group">
-                <label class="label" for="tone_freq">
-                    Beep frequency
+                <label class="label" for="tone_frequency">
+                    Courtesy beep frequency
                 </label>
 
                 <input class="input-field"
-                       id="tone_freq"
-                       name="tone_freq"
+                       id="tone_frequency"
+                       name="tone_frequency"
                        type="number"
                        min="300"
                        max="3000"
-                       value="{{ model.courtesy.frequency or 800 }}">
+                       value="{{ tones.courtesy_frequency }}">
 
                 <div class="note">
-                    Used only for single beep. Default is 800 Hz.
+                    Used only when Beep is selected. Default: 800 Hz.
                 </div>
+            </div>
+
+            <div class="field-group">
+                <label class="label" for="idle_mode">
+                    Repeater idle tone
+                </label>
+
+                <select class="input-field"
+                        id="idle_mode"
+                        name="idle_mode">
+                    <option value="silence"
+                            {% if tones.idle_mode == "silence" %}selected{% endif %}>
+                        None
+                    </option>
+                    <option value="pip"
+                            {% if tones.idle_mode == "pip" %}selected{% endif %}>
+                        Pip
+                    </option>
+                    <option value="chime"
+                            {% if tones.idle_mode == "chime" %}selected{% endif %}>
+                        Chime
+                    </option>
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label class="label" for="closedown_mode">
+                    Repeater closedown tone
+                </label>
+
+                <select class="input-field"
+                        id="closedown_mode"
+                        name="closedown_mode">
+                    <option value="none"
+                            {% if tones.closedown_mode == "none" %}selected{% endif %}>
+                        None
+                    </option>
+                    <option value="biboop"
+                            {% if tones.closedown_mode == "biboop" %}selected{% endif %}>
+                        Biboop
+                    </option>
+                    <option value="va"
+                            {% if tones.closedown_mode == "va" %}selected{% endif %}>
+                        VA
+                    </option>
+                </select>
             </div>
 
             <div class="button-row">
                 <a class="button-secondary"
-                   href="{{ url_for('ident_page') }}">
+                   href="{% if request.args.get('reconfigure') == '1' %}{{ url_for('reconfigure_page') }}{% elif is_multiport %}{{ url_for('port_cw_page') }}{% else %}{{ url_for('cw_page') }}{% endif %}">
                     Back
                 </a>
 
-                <button class="button-primary"
-                        type="submit">
-                    Continue
+                <button class="button-primary" type="submit">
+                    Save and Continue
                 </button>
             </div>
-
         </form>
-
     </section>
+
     <footer class="site-footer">
-    SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
-    SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
-    Dashboard SvxLink-Dash-V3.1|
-    SvxLink Package {{ version_info.package }} |
-    SvxLink {{ version_info.engine }}
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
     </footer>
 </main>
 </body>
