@@ -63,9 +63,14 @@ NANOPI_NEO_GPIO_DEFAULTS = {
     },
 }
 DEFAULT_MODEL = {
-    "schema_version": 1,
-        "build": {
+    "schema_version": 2,
+
+    "build": {
         "intent": "single_channel",
+    },
+
+    "installation": {
+        "primary_port_id": None,
     },
 
     "platform": {
@@ -86,10 +91,56 @@ DEFAULT_MODEL = {
     },
     "reflector": {
         "enabled": False,
+        "route": "none",
+
+        # Legacy Protocol 2 fields retained during migration.
         "name": None,
         "host": None,
         "port": None,
         "auth_key": None,
+
+        "federation": {
+            "network_id": None,
+            "auth_key": None,
+        },
+
+        "v2": {
+            "name": None,
+            "host": None,
+            "port": None,
+            "auth_key": None,
+            "default_tg": 0,
+            "monitor_tgs": [],
+        },
+
+        "v3": {
+            "name": None,
+            "host": None,
+            "port": None,
+            "default_tg": 0,
+            "monitor_tgs": [],
+            "subject": {
+                "given_name": None,
+                "surname": None,
+                "organizational_unit": None,
+                "organization": None,
+                "locality": None,
+                "state_or_province": None,
+                "country": None,
+                "email": None,
+            },
+        },
+    },
+
+    "topology": {
+        "reflector_link": {
+            "name": "LinkToReflector",
+            "ports": [],
+            "default_active": True,
+            "timeout": 300,
+        },
+        "local_links": [],
+        "independent_ports": [],
     },
 
         "ident": {
@@ -144,6 +195,12 @@ DEFAULT_MODEL = {
     "online_control": {
         "enabled": False,
         "command": None,
+    },
+    "tones": {
+        "courtesy_mode": "none",
+        "courtesy_frequency": 800,
+        "idle_mode": "chime",
+        "closedown_mode": "biboop",
     },
     "courtesy": {
         "mode": "none",

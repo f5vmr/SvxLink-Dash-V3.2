@@ -6,8 +6,8 @@ Node model persistence for SvxLink Dashboard V3.1.
 
 import json
 from pathlib import Path
-
-from models.node_model import new_node_model
+from copy import deepcopy
+from models.node_model import DEFAULT_MODEL, new_node_model
 from hw_platforms import get_platform_profile
 from services.svxlink_config_discovery import discover_macros
 
@@ -15,6 +15,12 @@ from services.svxlink_config_discovery import discover_macros
 APP_ROOT = Path("/opt/dashboard")
 CONFIG_DIR = APP_ROOT / "config"
 MODEL_FILE = CONFIG_DIR / "node_model.json"
+FEDERATION_HOST_IDS = {
+    "north.america.svxlink.net": "north_america",
+    "uk.wide.svxlink.uk": "ukwide",
+    "australia.svxlink.net": "australia_nz",
+    "yorkshire.svxlink.uk": "yorkshire",
+}
 CTCSS_TONES = [
     ("", "None / disabled"),
     ("67.0", "67.0 Hz"),
@@ -91,6 +97,164 @@ def create_default_model():
     platform = get_platform_profile()
     return new_node_model(platform=platform)
 
+def merge_missing_defaults(model, defaults=None):
+    """
+    Add missing default values without replacing saved configuration.
+
+    Returns True when the model was changed.
+    """
+
+    if defaults is None:
+        defaults = DEFAULT_MODEL
+
+    changed = False
+
+    for key, default_value in defaults.items():
+        if key not in model:
+            model[key] = deepcopy(default_value)
+            changed = True
+            continue
+
+        saved_value = model[key]
+
+        if isinstance(saved_value, dict) and isinstance(default_value, dict):
+            if merge_missing_defaults(saved_value, default_value):
+                changed = True
+
+    return changed
+
+def migrate_node_model(model):
+    """
+    Migrate an existing saved model to the current schema.
+
+    Existing values are retained. Legacy fields remain available until
+    all renderers and configuration pages have moved to schema version 2.
+    """
+
+    try:
+        schema_version = int(model.get("schema_version", 1))
+    except (TypeError, ValueError):
+        schema_version = 1
+
+    if schema_version >= 2:
+        return merge_missing_defaults(model)
+
+    legacy_reflector = deepcopy(model.get("reflector", {}))
+    legacy_courtesy = deepcopy(model.get("courtesy", {}))
+    legacy_repeater = deepcopy(model.get("repeater", {}))
+
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    nodes = model.get("nodes", {})
+    hardware = model.get("hardware", {})
+
+    is_multiport = (
+        hardware.get("family") == "ics"
+        or len(enabled_ports) > 1
+    )
+
+    port_courtesy = {}
+
+    if is_multiport and enabled_ports:
+        first_node = nodes.get(enabled_ports[0], {})
+        port_courtesy = deepcopy(first_node.get("courtesy", {}))
+
+    merge_missing_defaults(model)
+
+    if is_multiport and enabled_ports:
+        model["installation"]["primary_port_id"] = enabled_ports[0]
+
+    courtesy_source = port_courtesy or legacy_courtesy
+
+    courtesy_mode = courtesy_source.get(
+        "mode",
+        model["tones"]["courtesy_mode"],
+    )
+
+    courtesy_frequency = courtesy_source.get(
+        "frequency",
+        legacy_courtesy.get(
+            "frequency",
+            model["tones"]["courtesy_frequency"],
+        ),
+    )
+
+    idle_mode = courtesy_source.get(
+        "idle_tone",
+        legacy_repeater.get(
+            "idle_tone",
+            model["tones"]["idle_mode"],
+        ),
+    )
+
+    closedown_mode = courtesy_source.get(
+        "down_tone",
+        legacy_repeater.get(
+            "down_tone",
+            model["tones"]["closedown_mode"],
+        ),
+    )
+
+    if idle_mode == "none":
+        idle_mode = "silence"
+
+    model["tones"] = {
+        "courtesy_mode": courtesy_mode,
+        "courtesy_frequency": courtesy_frequency,
+        "idle_mode": idle_mode,
+        "closedown_mode": closedown_mode,
+    }
+
+    reflector_enabled = bool(
+        legacy_reflector.get("enabled")
+    )
+
+    model["reflector"]["enabled"] = reflector_enabled
+
+    if reflector_enabled:
+        legacy_host = str(
+            legacy_reflector.get("host") or ""
+        ).strip()
+
+        federation_id = FEDERATION_HOST_IDS.get(legacy_host)
+
+        if federation_id:
+            model["reflector"]["route"] = "federation"
+            model["reflector"]["federation"]["network_id"] = federation_id
+            model["reflector"]["federation"]["auth_key"] = (
+                legacy_reflector.get("auth_key")
+            )
+        else:
+            model["reflector"]["route"] = "v2"
+            model["reflector"]["v2"].update({
+                "name": legacy_reflector.get("name"),
+                "host": legacy_reflector.get("host"),
+                "port": legacy_reflector.get("port"),
+                "auth_key": legacy_reflector.get("auth_key"),
+                "default_tg": legacy_reflector.get("default_tg", 0),
+                "monitor_tgs": legacy_reflector.get("monitor_tgs", []),
+            })
+    else:
+        model["reflector"]["route"] = "none"
+
+    if is_multiport and enabled_ports:
+        if reflector_enabled:
+            model["topology"]["reflector_link"]["ports"] = list(
+                enabled_ports
+            )
+            model["topology"]["independent_ports"] = []
+        else:
+            model["topology"]["reflector_link"]["ports"] = []
+            model["topology"]["independent_ports"] = list(
+                enabled_ports
+            )
+
+    model["schema_version"] = 2
+
+    return True
 
 def save_node_model(model):
     ensure_config_dir()
@@ -114,12 +278,17 @@ def load_node_model():
             MODEL_FILE.read_text(encoding="utf-8")
         )
 
+        model_changed = migrate_node_model(model)
+
         if "macros" not in model:
             try:
                 model["macros"] = discover_macros()
             except FileNotFoundError:
                 model["macros"] = {}
 
+            model_changed = True
+
+        if model_changed:
             save_node_model(model)
 
         return model
