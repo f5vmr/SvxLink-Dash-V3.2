@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" class="light-theme">
+<head>
+    <meta charset="UTF-8">
+    <title>Installation Identity</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='svxlink.ico') }}">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <div class="page-header">
+            <img class="page-icon"
+                 src="{{ url_for('static', filename='svxlink.ico') }}"
+                 alt="SvxLink icon">
+
+            <div class="page-heading">
+                <h1>Installation Identity</h1>
+                <p>
+                    Select the primary radio port whose callsign identifies
+                    this installation as a whole.
+                </p>
+            </div>
+        </div>
+
+        <div class="note">
+            The primary callsign is used for ReflectorLogic, node information,
+            the dashboard installation identity and the system login display.
+            Secondary ports may use the same callsign or different callsigns.
+        </div>
+
+        <div class="info-box">
+            <h3>Primary port and reflector operation</h3>
+
+            <p>
+                If reflector operation is enabled, the primary port must be
+                included in the reflector link. Additional ports may also be
+                connected to that reflector.
+            </p>
+
+            <p>
+                The primary selection does not prevent this port from being
+                independent or participating in a local link when reflector
+                operation is disabled.
+            </p>
+        </div>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for('installation_identity_page') }}" method="post">
+            {% if request.args.get("reconfigure") == "1" %}
+                <input type="hidden" name="reconfigure" value="1">
+            {% endif %}
+
+            <div class="form-section">
+                <div class="label">Primary installation port</div>
+
+                {% for port_id in enabled_ports %}
+                    {% set node = nodes.get(port_id, {}) %}
+                    {% set role = node.get("role", "unknown") %}
+                    {% set callsign = node.get("callsign", "Not configured") %}
+
+                    <div class="radio-option">
+                        <label>
+                            <input
+                                type="radio"
+                                name="primary_port_id"
+                                value="{{ port_id }}"
+                                {% if primary_port_id == port_id %}checked{% endif %}
+                            >
+
+                            <span class="radio-option-text">
+                                <strong>
+                                    Port {{ port_id }} — {{ callsign }}
+                                </strong><br>
+                                {{ role|title }} logic
+                            </span>
+                        </label>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="button-row">
+                <a class="button-secondary"
+                   href="{% if request.args.get('reconfigure') == '1' %}{{ url_for('reconfigure_page') }}{% else %}{{ url_for('port_repeater_page') }}{% endif %}">
+                    Back
+                </a>
+
+                <button class="button-primary" type="submit">
+                    Save and Continue
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <footer class="site-footer">
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
+    </footer>
+</main>
+</body>
+</html>

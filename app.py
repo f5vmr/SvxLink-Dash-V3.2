@@ -1982,7 +1982,10 @@ def port_repeater_page():
 
         save_node_model(model)
 
-        return redirect(url_for("build_page"))
+        if request.form.get("reconfigure") == "1":
+            return redirect(url_for("build_page"))
+
+        return redirect(url_for("installation_identity_page"))
 
     return render_template(
         "port_repeater.html",
@@ -1990,6 +1993,67 @@ def port_repeater_page():
         nodes=nodes,
         enabled_ports=enabled_ports,
         repeater_port_ids=repeater_port_ids,
+        version_info=get_version_info(),
+    )
+@app.route("/installation-identity", methods=["GET", "POST"])
+def installation_identity_page():
+    model = load_node_model()
+
+    if not is_multiport_build(model):
+        return redirect(url_for("reflector_page"))
+
+    nodes = model.get("nodes", {})
+
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    if not enabled_ports:
+        return redirect(url_for("hardware_ports_page"))
+
+    if not nodes:
+        return redirect(url_for("port_config_page"))
+
+    installation = model.setdefault("installation", {})
+    primary_port_id = str(
+        installation.get("primary_port_id") or ""
+    )
+
+    error = None
+
+    if request.method == "POST":
+        selected_port_id = str(
+            request.form.get("primary_port_id") or ""
+        ).strip()
+
+        if selected_port_id not in enabled_ports:
+            error = "Please select an enabled primary port."
+
+        elif not nodes.get(selected_port_id, {}).get("callsign"):
+            error = (
+                f"Port {selected_port_id} must have a callsign "
+                "before it can become the primary port."
+            )
+
+        else:
+            installation["primary_port_id"] = selected_port_id
+            model["installation"] = installation
+
+            save_node_model(model)
+
+            if request.form.get("reconfigure") == "1":
+                return redirect(url_for("build_page"))
+
+            return redirect(url_for("reflector_page"))
+
+    return render_template(
+        "installation_identity.html",
+        model=model,
+        nodes=nodes,
+        enabled_ports=enabled_ports,
+        primary_port_id=primary_port_id,
+        error=error,
         version_info=get_version_info(),
     )
 @app.route("/port-final-review", methods=["GET", "POST"])
@@ -4070,6 +4134,15 @@ def reconfigure_page():
                 "label": "Port Configuration Menu",
                 "route": "port_config_page",
                 "description": "Return to the multi-port configuration menu.",
+            },
+            {
+                "id": "installation_identity",
+                "label": "Primary Installation Port",
+                "route": "installation_identity_page",
+                "description": (
+                    "Select the primary port and callsign used to "
+                    "identify the complete installation."
+                ),
             },
             {
                 "id": "port_final_review",
