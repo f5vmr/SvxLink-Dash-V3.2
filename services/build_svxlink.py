@@ -16,12 +16,10 @@ This is the authoritative build pipeline.
 
 from pathlib import Path
 import subprocess
-import json
 from unittest import result
 
-
-NODE_INFO_FILE = Path("/etc/svxlink/node_info.json")
 from models.node_model import validate_model
+from services.node_info_service import write_node_info_json
 
 from hw_platforms import (
     validate_platform_model,
@@ -180,22 +178,6 @@ def deploy_motd_script(content):
 
     return "/etc/update-motd.d/10-uname"
 
-
-def deploy_node_info(model):
-    node_info = {
-        "callsign": get_primary_callsign(model),
-        "type": model.get("node", {}).get("type"),
-        "platform": model.get("platform", {}).get("name"),
-        "reflector": model.get("reflector", {}).get("name"),
-        "modules": model.get("modules", {}).get("enabled", []),
-    }
-
-    write_text_file(
-        NODE_INFO_FILE,
-        json.dumps(node_info, indent=4) + "\n",
-    )
-
-    return str(NODE_INFO_FILE)
 
 def ensure_language_pack(model):
     language = (
@@ -364,8 +346,8 @@ def build_svxlink_configuration(
         deployed.append(motd_path)
         result["rendered_files"] = deployed
         
-        node_info_path = deploy_node_info(model)
-        result["rendered_files"].append(node_info_path)
+        node_info_path = write_node_info_json(model)
+        result["rendered_files"].append(str(node_info_path))
         language_path = ensure_language_pack(model)
         result["rendered_files"].append(language_path)
     except Exception as exc:

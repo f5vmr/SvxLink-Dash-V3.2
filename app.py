@@ -90,6 +90,7 @@ from services.gpio_service import (
 )
 from services.node_info_service import write_node_info_json
 from renderers.svxlink_renderer import (
+    get_primary_callsign,
     render_echolink_module,
 )
 from services.version_service import get_version_info
@@ -1036,13 +1037,13 @@ def is_multiport_build(model):
 
 def next_after_timezone(model):
     if is_multiport_build(model):
-        return url_for("reflector_page")
+        return url_for("port_roles_page")
 
     return url_for("node_page")
 
 def next_after_reflector(model):
     if is_multiport_build(model):
-        return url_for("port_roles_page")
+        return url_for("port_final_review_page")
 
     return url_for("review_page")
 def initialise_port_nodes(model, profile):
@@ -2930,80 +2931,468 @@ def metar_airports_page():
         error=error,
         version_info=get_version_info(),
     )
-    
+
+FEDERATION_REFLECTORS = {
+    "north_america": {
+        "name": "North America",
+        "host": "north.america.svxlink.net",
+        "port": 35300,
+        "url": "https://north.america.svxlink.net",
+        "suggested_monitor_tgs": [310],
+    },
+    "ukwide": {
+        "name": "UKWide",
+        "host": "uk.wide.svxlink.uk",
+        "port": 35300,
+        "url": "https://ukwide.svxlink.net",
+        "suggested_monitor_tgs": [235],
+    },
+    "australia_nz": {
+        "name": "Australia / New Zealand",
+        "host": "australia.svxlink.net",
+        "port": 35300,
+        "url": "https://au.svxlink.net",
+        "suggested_monitor_tgs": [505],
+    },
+    "yorkshire": {
+        "name": "YorkshireNet Reflector",
+        "host": "yorkshire.svxlink.uk",
+        "port": 5310,
+        "url": "https://svxlink.qsos.uk/",
+        "suggested_monitor_tgs": [23450],
+    },
+}
+
 @app.route("/reflector", methods=["GET", "POST"])
 def reflector_page():
     model = load_node_model()
     error = None
 
-    reflectors = {
-        "north_america": {
-            "name": "North America",
-            "host": "north.america.svxlink.net",
-            "port": 35300,
-            "url": "https://north.america.svxlink.net",
-            "monitor_tgs": 3100,
-        },
-        "ukwide": {
-            "name": "UKWide",
-            "host": "uk.wide.svxlink.uk",
-            "port": 35300,
-            "url": "https://ukwide.svxlink.net",
-            "monitor_tgs": 235,
-        },
-        "australia_nz": {
-            "name": "Australia / New Zealand",
-            "host": "australia.svxlink.net",
-            "port": 35300,
-            "url": "https://au.svxlink.net",
-            "monitor_tgs": 505,
-        },
-        "yorkshire": {
-            "name": "YorkshireNet Reflector",
-            "host": "yorkshire.svxlink.uk",
-            "port": 5310,
-            "url": "https://svxlink.qsos.uk/",
-            "monitor_tgs": 235,
-        },
+    reflector = model.setdefault("reflector", {})
+    multiport = is_multiport_build(model)
+
+    valid_routes = {
+        "none",
+        "federation",
+        "v2",
+        "v3",
     }
 
+    selected_route = str(
+        reflector.get("route") or "none"
+    ).strip().lower()
+
+    if selected_route not in valid_routes:
+        selected_route = "none"
+
     if request.method == "POST":
-        connect = request.form.get("connect")
+        requested_route = str(
+            request.form.get("reflector_route") or ""
+        ).strip().lower()
 
-        if connect == "no":
-            model["reflector"]["enabled"] = False
-            model["reflector"]["name"] = None
-            model["reflector"]["host"] = None
-            model["reflector"]["port"] = None
-            model["reflector"]["auth_key"] = None
+        if requested_route not in valid_routes:
+            error = "Please select a valid reflector access route."
+
+        elif requested_route == "none":
+            reflector["enabled"] = False
+            reflector["route"] = "none"
+            model["reflector"] = reflector
 
             save_node_model(model)
+
+            if request.form.get("reconfigure") == "1":
+                return redirect(url_for("build_page"))
+
             return redirect(next_after_reflector(model))
 
-        reflector_id = request.form.get("reflector")
-        password = request.form.get("password", "").strip()
-
-        if reflector_id not in reflectors:
-            error = "Please select a reflector."
-        elif len(password) != 16:
-            error = "Reflector password must be exactly 16 characters."
         else:
-            selected = reflectors[reflector_id]
+            previous_route = str(
+                reflector.get("route") or "none"
+            ).strip().lower()
 
-            model["reflector"]["enabled"] = True
-            model["reflector"]["name"] = selected["name"]
-            model["reflector"]["host"] = selected["host"]
-            model["reflector"]["port"] = selected["port"]
-            model["reflector"]["auth_key"] = password
+            reflector["route"] = requested_route
 
+            if previous_route != requested_route:
+                reflector["enabled"] = False
+
+            model["reflector"] = reflector
             save_node_model(model)
-            return redirect(next_after_reflector(model))
+
+            route_endpoints = {
+                "federation": "reflector_federation_page",
+                "v2": "reflector_v2_page",
+                "v3": "reflector_v3_page",
+            }
+
+            route_arguments = {}
+
+            if request.form.get("reconfigure") == "1":
+                route_arguments["reconfigure"] = "1"
+
+            return redirect(
+                url_for(
+                    route_endpoints[requested_route],
+                    **route_arguments,
+                )
+            )
+
+    primary_port_id = None
+
+    if multiport:
+        primary_port_id = str(
+            model.get("installation", {}).get(
+                "primary_port_id"
+            )
+            or ""
+        )
 
     return render_template(
         "reflector.html",
         model=model,
-        reflectors=reflectors,
+        selected_route=selected_route,
+        primary_callsign=get_primary_callsign(model),
+        primary_port_id=primary_port_id,
+        is_multiport=multiport,
         error=error,
+        version_info=get_version_info(),
+    )
+
+@app.route("/reflector/federation", methods=["GET", "POST"])
+def reflector_federation_page():
+    model = load_node_model()
+    error = None
+
+    reflector = model.setdefault("reflector", {})
+    federation = reflector.setdefault("federation", {})
+
+    selected_network_id = str(
+        federation.get("network_id") or ""
+    ).strip()
+
+    if request.method == "POST":
+        selected_network_id = str(
+            request.form.get("network_id") or ""
+        ).strip()
+
+        auth_key = str(
+            request.form.get("auth_key") or ""
+        ).strip()
+
+        if selected_network_id not in FEDERATION_REFLECTORS:
+            error = "Please select a Federation Family reflector."
+
+        elif len(auth_key) != 16:
+            error = (
+                "The Federation subscription password must be "
+                "exactly 16 characters."
+            )
+
+        else:
+            selected = FEDERATION_REFLECTORS[
+                selected_network_id
+            ]
+
+            federation["network_id"] = selected_network_id
+            federation["auth_key"] = auth_key
+
+            reflector["enabled"] = True
+            reflector["route"] = "federation"
+            reflector["federation"] = federation
+
+            # Legacy fields remain populated until the renderer
+            # moves completely to the version 2 route structure.
+            reflector["name"] = selected["name"]
+            reflector["host"] = selected["host"]
+            reflector["port"] = selected["port"]
+            reflector["auth_key"] = auth_key
+            # Talkgroups are managed later from the main dashboard.
+            # Preserve existing operational choices during reconfiguration.
+            reflector.setdefault("default_tg", 0)
+            reflector.setdefault("monitor_tgs", [])
+
+            model["reflector"] = reflector
+            save_node_model(model)
+
+            if request.form.get("reconfigure") == "1":
+                return redirect(url_for("build_page"))
+
+            return redirect(next_after_reflector(model))
+
+    return render_template(
+        "reflector_federation.html",
+        model=model,
+        reflectors=FEDERATION_REFLECTORS,
+        federation=federation,
+        selected_network_id=selected_network_id,
+        primary_callsign=get_primary_callsign(model),
+        error=error,
+        version_info=get_version_info(),
+    )
+
+@app.route("/reflector/v2", methods=["GET", "POST"])
+def reflector_v2_page():
+    model = load_node_model()
+    error = None
+
+    reflector = model.setdefault("reflector", {})
+    v2 = reflector.setdefault("v2", {})
+
+    if request.method == "POST":
+        name = str(
+            request.form.get("name") or ""
+        ).strip()
+
+        host = str(
+            request.form.get("host") or ""
+        ).strip()
+
+        port_text = str(
+            request.form.get("port") or ""
+        ).strip()
+
+        auth_key = str(
+            request.form.get("auth_key") or ""
+        ).strip()
+
+        try:
+            port = int(port_text)
+        except ValueError:
+            port = None
+
+        if not name:
+            error = "Please enter a name for the reflector."
+
+        elif not host:
+            error = (
+                "Please enter the reflector hostname or IP address."
+            )
+
+        elif port is None or port < 1 or port > 65535:
+            error = (
+                "Reflector port must be a number between 1 and 65535."
+            )
+
+        elif not auth_key:
+            error = (
+                "Please enter the authentication password supplied "
+                "by the reflector administrator."
+            )
+
+        else:
+            # Preserve operational talkgroup settings. These are
+            # managed later from the main dashboard.
+            default_tg = reflector.get(
+                "default_tg",
+                v2.get("default_tg", 0),
+            )
+
+            monitor_tgs = reflector.get(
+                "monitor_tgs",
+                v2.get("monitor_tgs", []),
+            )
+
+            v2["name"] = name
+            v2["host"] = host
+            v2["port"] = port
+            v2["auth_key"] = auth_key
+            v2["default_tg"] = default_tg
+            v2["monitor_tgs"] = monitor_tgs
+
+            reflector["enabled"] = True
+            reflector["route"] = "v2"
+            reflector["v2"] = v2
+
+            # Keep legacy fields populated until the renderer
+            # has moved completely to the route-specific structure.
+            reflector["name"] = name
+            reflector["host"] = host
+            reflector["port"] = port
+            reflector["auth_key"] = auth_key
+            reflector["default_tg"] = default_tg
+            reflector["monitor_tgs"] = monitor_tgs
+
+            model["reflector"] = reflector
+            save_node_model(model)
+
+            if request.form.get("reconfigure") == "1":
+                return redirect(url_for("build_page"))
+
+            return redirect(next_after_reflector(model))
+
+    return render_template(
+        "reflector_v2.html",
+        model=model,
+        v2=v2,
+        primary_callsign=get_primary_callsign(model),
+        error=error,
+        version_info=get_version_info(),
+    )
+
+@app.route("/reflector/v3", methods=["GET", "POST"])
+def reflector_v3_page():
+    model = load_node_model()
+    error = None
+
+    reflector = model.setdefault("reflector", {})
+    v3 = reflector.setdefault("v3", {})
+    subject = v3.setdefault("subject", {})
+
+    if request.method == "POST":
+        name = str(
+            request.form.get("name") or ""
+        ).strip()
+
+        host = str(
+            request.form.get("host") or ""
+        ).strip()
+
+        port_text = str(
+            request.form.get("port") or ""
+        ).strip()
+
+        given_name = str(
+            request.form.get("given_name") or ""
+        ).strip()
+
+        surname = str(
+            request.form.get("surname") or ""
+        ).strip()
+
+        organizational_unit = str(
+            request.form.get("organizational_unit") or ""
+        ).strip()
+
+        organization = str(
+            request.form.get("organization") or ""
+        ).strip()
+
+        locality = str(
+            request.form.get("locality") or ""
+        ).strip()
+
+        state_or_province = str(
+            request.form.get("state_or_province") or ""
+        ).strip()
+
+        country = str(
+            request.form.get("country") or ""
+        ).strip().upper()
+
+        email = str(
+            request.form.get("email") or ""
+        ).strip()
+
+        try:
+            port = int(port_text)
+        except ValueError:
+            port = None
+
+        if not name:
+            error = "Please enter a name for the reflector."
+
+        elif not host:
+            error = (
+                "Please enter the reflector hostname or IP address."
+            )
+
+        elif port is None or port < 1 or port > 65535:
+            error = (
+                "Reflector port must be a number between 1 and 65535."
+            )
+
+        elif not given_name:
+            error = "Please enter the certificate given name."
+
+        elif not surname:
+            error = "Please enter the certificate surname."
+
+        elif not organizational_unit:
+            error = (
+                "Please enter the certificate organizational unit."
+            )
+
+        elif not organization:
+            error = "Please enter the certificate organization."
+
+        elif not locality:
+            error = "Please enter the certificate locality."
+
+        elif not state_or_province:
+            error = (
+                "Please enter the certificate state or province."
+            )
+
+        elif len(country) != 2 or not country.isalpha():
+            error = (
+                "Certificate country must be a two-letter code."
+            )
+
+        elif (
+            not email
+            or "@" not in email
+            or email.startswith("@")
+            or email.endswith("@")
+        ):
+            error = "Please enter a valid certificate email address."
+
+        else:
+            # Preserve operational talkgroup settings. These are
+            # managed later from the main dashboard.
+            default_tg = reflector.get(
+                "default_tg",
+                v3.get("default_tg", 0),
+            )
+
+            monitor_tgs = reflector.get(
+                "monitor_tgs",
+                v3.get("monitor_tgs", []),
+            )
+
+            subject["given_name"] = given_name
+            subject["surname"] = surname
+            subject["organizational_unit"] = organizational_unit
+            subject["organization"] = organization
+            subject["locality"] = locality
+            subject["state_or_province"] = state_or_province
+            subject["country"] = country
+            subject["email"] = email
+
+            v3["name"] = name
+            v3["host"] = host
+            v3["port"] = port
+            v3["default_tg"] = default_tg
+            v3["monitor_tgs"] = monitor_tgs
+            v3["subject"] = subject
+
+            reflector["enabled"] = True
+            reflector["route"] = "v3"
+            reflector["v3"] = v3
+
+            # Keep the shared fields populated until rendering is
+            # fully route-specific.
+            reflector["name"] = name
+            reflector["host"] = host
+            reflector["port"] = port
+            reflector["auth_key"] = None
+            reflector["default_tg"] = default_tg
+            reflector["monitor_tgs"] = monitor_tgs
+
+            model["reflector"] = reflector
+            save_node_model(model)
+
+            if request.form.get("reconfigure") == "1":
+                return redirect(url_for("build_page"))
+
+            return redirect(next_after_reflector(model))
+
+    return render_template(
+        "reflector_v3.html",
+        model=model,
+        v3=v3,
+        subject=subject,
+        primary_callsign=get_primary_callsign(model),
+        error=error,
+        version_info=get_version_info(),
     )
 
 @app.route("/node-info", methods=["GET", "POST"])
@@ -3190,6 +3579,7 @@ def node_info_edit_page():
         error=error,
         saved=saved
     )
+
 @app.route("/review", methods=["GET", "POST"])
 def review_page():
     model = load_node_model()
@@ -3199,7 +3589,6 @@ def review_page():
         return redirect(url_for("build_page"))
 
     return render_template("review.html", model=model)
-
 
 @app.route("/build", methods=["GET", "POST"])
 def build_page():

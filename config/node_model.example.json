@@ -68,6 +68,19 @@
         "local_links": [],
         "independent_ports": []
     },
+    "location_info": {
+        "enabled": false,
+        "aprs_server_list": "",
+        "publish_echolink_status": false,
+        "status_server_list": "aprs.echolink.org:5199",
+        "narrow": true,
+        "tx_offset_khz": 0,
+        "antenna_gain": "",
+        "antenna_height_unit": "m",
+        "advertised_ctcss": "",
+        "beacon_interval": 10,
+        "comment": ""
+        },
     "ident": {
         "short": {
             "mode": "cw",

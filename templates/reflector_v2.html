@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="light-theme">
+<head>
+    <meta charset="UTF-8">
+    <title>Protocol 2 Reflector</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='svxlink.ico') }}">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <div class="page-header">
+            <img class="page-icon"
+                 src="{{ url_for('static', filename='svxlink.ico') }}"
+                 alt="SvxLink icon">
+
+            <div class="page-heading">
+                <h1>Other Protocol 2 Reflector</h1>
+                <p>
+                    Enter the connection and authentication information
+                    supplied by the reflector administrator.
+                </p>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h3>Installation identity</h3>
+
+            <p>
+                This reflector connection will use
+                <strong>{{ primary_callsign }}</strong>
+                as the installation callsign.
+            </p>
+
+            <p>
+                Protocol 2 reflectors may use passwords of different lengths.
+                Enter the password exactly as supplied by the reflector
+                administrator.
+            </p>
+        </div>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for(
+                          'reflector_v2_page',
+                          reconfigure='1'
+                      ) if request.args.get('reconfigure') == '1'
+                      else url_for('reflector_v2_page') }}"
+              method="post">
+
+            {% if request.args.get("reconfigure") == "1" %}
+                <input type="hidden" name="reconfigure" value="1">
+            {% endif %}
+
+            <div class="field-group">
+                <label class="label" for="name">
+                    Reflector name
+                </label>
+
+                <input class="input-field"
+                       type="text"
+                       id="name"
+                       name="name"
+                       value="{{ v2.get('name') or '' }}"
+                       placeholder="Example Reflector">
+            </div>
+
+            <div class="field-group">
+                <label class="label" for="host">
+                    Reflector hostname or IP address
+                </label>
+
+                <input class="input-field"
+                       type="text"
+                       id="host"
+                       name="host"
+                       value="{{ v2.get('host') or '' }}"
+                       placeholder="reflector.example.net or 192.0.2.10"
+                       autocomplete="off">
+            </div>
+
+            <div class="field-group">
+                <label class="label" for="port">
+                    Reflector port
+                </label>
+
+                <input class="input-field"
+                       type="number"
+                       id="port"
+                       name="port"
+                       min="1"
+                       max="65535"
+                       value="{{ v2.get('port') or 35300 }}">
+            </div>
+
+            <div class="field-group">
+                <label class="label" for="auth_key">
+                    Reflector authentication password
+                </label>
+
+                <input class="input-field"
+                       type="text"
+                       id="auth_key"
+                       name="auth_key"
+                       value="{{ v2.get('auth_key') or '' }}"
+                       autocomplete="off"
+                       placeholder="Password supplied by the administrator">
+            </div>
+
+            <div class="note">
+                This password is supplied by the destination reflector
+                administrator. It is not necessarily 16 characters and is
+                not the SvxLink Dashboard password.
+            </div>
+            <div class="info-box">
+                <h3>Talkgroup configuration</h3>
+            
+                <p>
+                    Default and monitored talkgroups are configured later from the main
+                    dashboard Talkgroups page. They are not required to establish the
+                    initial reflector connection.
+                </p>
+            
+                <p>
+                    The initial configuration uses a default talkgroup of 0 and no
+                    monitored talkgroups. These settings can be changed after the
+                    installation has been built.
+                </p>
+            </div>
+            <div class="button-row">
+                <a class="button-secondary"
+                   href="{{ url_for(
+                              'reflector_page',
+                              reconfigure='1'
+                          ) if request.args.get('reconfigure') == '1'
+                          else url_for('reflector_page') }}">
+                    Back
+                </a>
+
+                <button class="button-primary" type="submit">
+                    Save and Continue
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <footer class="site-footer">
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
+    </footer>
+</main>
+</body>
+</html>

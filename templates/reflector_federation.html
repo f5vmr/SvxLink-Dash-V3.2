@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" class="light-theme">
+<head>
+    <meta charset="UTF-8">
+    <title>Federation Family Reflector</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='svxlink.ico') }}">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <div class="page-header">
+            <img class="page-icon"
+                 src="{{ url_for('static', filename='svxlink.ico') }}"
+                 alt="SvxLink icon">
+
+            <div class="page-heading">
+                <h1>Federation Family Reflector</h1>
+                <p>
+                    Select the Federation Family network and enter the
+                    subscription password supplied for this installation.
+                </p>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h3>Installation identity</h3>
+
+            <p>
+                This reflector connection will use
+                <strong>{{ primary_callsign }}</strong>
+                as the installation callsign.
+            </p>
+
+            <p>
+                The subscription password is issued by the chosen reflector
+                administrator. It is not the SvxLink Dashboard password.
+            </p>
+        </div>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for(
+                          'reflector_federation_page',
+                          reconfigure='1'
+                      ) if request.args.get('reconfigure') == '1'
+                      else url_for('reflector_federation_page') }}"
+              method="post">
+
+            {% if request.args.get("reconfigure") == "1" %}
+                <input type="hidden" name="reconfigure" value="1">
+            {% endif %}
+
+            <div class="field-group">
+                <label class="label" for="network_id">
+                    Federation Family reflector
+                </label>
+
+                <select class="input-field"
+                        id="network_id"
+                        name="network_id">
+                    <option value="">Select a reflector</option>
+
+                    {% for key, ref in reflectors.items() %}
+                        <option value="{{ key }}"
+                                {% if selected_network_id == key %}selected{% endif %}>
+                            {{ ref.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="note">
+                Register with the relevant reflector before entering the
+                subscription password. The Federation Family uses an exact
+                16-character password supplied by the reflector administrator.
+            </div>
+
+            <div class="field-group">
+                <label class="label" for="auth_key">
+                    16-character subscription password
+                </label>
+
+                <input class="input-field"
+                       type="text"
+                       id="auth_key"
+                       name="auth_key"
+                       minlength="16"
+                       maxlength="16"
+                       autocomplete="off"
+                       value="{{ federation.get('auth_key') or '' }}"
+                       placeholder="16-character password">
+            </div>
+
+            <div class="note">
+                {% for key, ref in reflectors.items() %}
+                    <a href="{{ ref.url }}" target="_blank" rel="noopener">
+                        {{ ref.name }}
+                    </a><br>
+                {% endfor %}
+            </div>
+            <div class="info-box">
+                <h3>Talkgroup configuration</h3>
+                        
+                <p>
+                    Default and monitored talkgroups are configured later from the main
+                    dashboard Talkgroups page. They are not required to establish the
+                    initial reflector connection.
+                </p>
+            
+                <p>
+                    The initial configuration uses a default talkgroup of 0 and no
+                    monitored talkgroups. These settings can be changed after the
+                    installation has been built.
+                </p>
+            </div>
+            <div class="button-row">
+                <a class="button-secondary"
+                   href="{{ url_for(
+                              'reflector_page',
+                              reconfigure='1'
+                          ) if request.args.get('reconfigure') == '1'
+                          else url_for('reflector_page') }}">
+                    Back
+                </a>
+
+                <button class="button-primary" type="submit">
+                    Save and Continue
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <footer class="site-footer">
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
+    </footer>
+</main>
+</body>
+</html>

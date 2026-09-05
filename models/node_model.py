@@ -142,7 +142,37 @@ DEFAULT_MODEL = {
         "local_links": [],
         "independent_ports": [],
     },
+        "node_info": {
+            "nodeLocation": "",
+            "hidden": False,
+            "qth_name": "",
+            "sysop": "",
+            "lat": "",
+            "long": "",
+            "locator": "",
+            "lat_dms": "",
+            "long_dms": "",
+            "rx_freq": "",
+            "tx_freq": "",
+            "tx_power": "",
+            "antenna": "",
+            "antenna_height": "",
+            "antenna_direction": "omni",
+        },
 
+        "location_info": {
+            "enabled": False,
+            "aprs_server_list": "",
+            "publish_echolink_status": False,
+            "status_server_list": "aprs.echolink.org:5199",
+            "narrow": True,
+            "tx_offset_khz": 0,
+            "antenna_gain": "",
+            "antenna_height_unit": "m",
+            "advertised_ctcss": "",
+            "beacon_interval": 10,
+            "comment": "",
+        },
         "ident": {
             "short": {
             "mode": "cw",
@@ -381,15 +411,123 @@ def validate_model(model):
     reflector = model.get("reflector", {})
 
     if reflector.get("enabled"):
-        if not reflector.get("host"):
-            errors.append("Reflector host is required.")
-        if not reflector.get("port"):
-            errors.append("Reflector port is required.")
-        if not reflector.get("auth_key"):
-            errors.append("Reflector authentication key is required.")
-        elif len(str(reflector.get("auth_key"))) != 16:
-            errors.append("Reflector authentication key must be 16 characters.")
- 
+        route = str(
+            reflector.get("route") or ""
+        ).strip().lower()
+
+        if route == "federation":
+            federation = reflector.get("federation", {})
+
+            network_id = str(
+                federation.get("network_id") or ""
+            ).strip()
+
+            auth_key = str(
+                federation.get("auth_key") or ""
+            )
+
+            if not network_id:
+                errors.append(
+                    "Federation Family reflector selection is required."
+                )
+
+            if len(auth_key) != 16:
+                errors.append(
+                    "Federation subscription password must be "
+                    "exactly 16 characters."
+                )
+
+            if not reflector.get("host"):
+                errors.append("Reflector host is required.")
+
+            if not reflector.get("port"):
+                errors.append("Reflector port is required.")
+
+        elif route == "v2":
+            v2 = reflector.get("v2", {})
+
+            host = v2.get("host") or reflector.get("host")
+            port = v2.get("port") or reflector.get("port")
+            auth_key = (
+                v2.get("auth_key")
+                or reflector.get("auth_key")
+            )
+
+            if not host:
+                errors.append("Protocol 2 reflector host is required.")
+
+            if not port:
+                errors.append("Protocol 2 reflector port is required.")
+
+            if not auth_key:
+                errors.append(
+                    "Protocol 2 reflector authentication password "
+                    "is required."
+                )
+
+        elif route == "v3":
+            v3 = reflector.get("v3", {})
+            subject = v3.get("subject", {})
+
+            host = v3.get("host") or reflector.get("host")
+            port = v3.get("port") or reflector.get("port")
+
+            if not host:
+                errors.append("Protocol 3 reflector host is required.")
+
+            if not port:
+                errors.append("Protocol 3 reflector port is required.")
+
+            required_subject_fields = {
+                "given_name": "given name",
+                "surname": "surname",
+                "organizational_unit": "organizational unit",
+                "organization": "organization",
+                "locality": "locality",
+                "state_or_province": "state or province",
+                "country": "country",
+                "email": "email address",
+            }
+
+            for field_name, field_label in required_subject_fields.items():
+                if not str(subject.get(field_name) or "").strip():
+                    errors.append(
+                        f"Protocol 3 certificate {field_label} "
+                        "is required."
+                    )
+
+            country = str(
+                subject.get("country") or ""
+            ).strip()
+
+            if country and (
+                len(country) != 2
+                or not country.isalpha()
+            ):
+                errors.append(
+                    "Protocol 3 certificate country must be "
+                    "a two-letter code."
+                )
+
+            email = str(
+                subject.get("email") or ""
+            ).strip()
+
+            if email and (
+                "@" not in email
+                or email.startswith("@")
+                or email.endswith("@")
+            ):
+                errors.append(
+                    "Protocol 3 certificate email address is invalid."
+                )
+
+        else:
+            errors.append(
+                "Enabled reflector must use Federation Family, "
+                "Protocol 2 or Protocol 3."
+            )
+
     echolink = model.get("echolink", {})
 
     if echolink.get("enabled"):

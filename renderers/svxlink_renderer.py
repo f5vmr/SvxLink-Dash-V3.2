@@ -1105,6 +1105,234 @@ def get_primary_callsign(model):
     )
 
     return str(callsign).strip().upper()
+def get_primary_port_id(model):
+    """
+    Return the explicitly selected primary port for a multi-port build.
+
+    Older models fall back to the first enabled port. A single-port
+    installation does not require a port identifier here.
+    """
+
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    primary_port_id = str(
+        model.get("installation", {}).get("primary_port_id") or ""
+    )
+
+    if primary_port_id in enabled_ports:
+        return primary_port_id
+
+    if enabled_ports:
+        return enabled_ports[0]
+
+    return None
+
+
+def get_primary_logic_name(model):
+    """
+    Return the logic section representing the installation.
+
+    Multi-port logic sections currently use PortNLogic names.
+    """
+
+    primary_port_id = get_primary_port_id(model)
+
+    if primary_port_id is not None:
+        return f"Port{primary_port_id}Logic"
+
+    if model.get("node", {}).get("type") == "repeater":
+        return "RepeaterLogic"
+
+    return "SimplexLogic"
+
+def get_location_info_callsign(model):
+    """
+    Return the APRS identity for LocationInfo.
+
+    EchoLink -R and -L callsigns become ER- and EL- object names.
+    Without EchoLink, use the primary installation callsign.
+    """
+
+    echolink = model.get("echolink", {})
+
+    if echolink.get("enabled"):
+        echolink_callsign = str(
+            echolink.get("callsign") or ""
+        ).strip().upper()
+
+        if echolink_callsign.endswith("-R"):
+            return f"ER-{echolink_callsign[:-2]}"
+
+        if echolink_callsign.endswith("-L"):
+            return f"EL-{echolink_callsign[:-2]}"
+
+    return get_primary_callsign(model)
+def render_location_info(model):
+    """
+    Render the optional installation-wide LocationInfo section.
+
+    LocationInfo represents the selected primary port in a multi-port
+    installation, or the only radio logic in a single-port installation.
+    """
+
+    location_info = model.get("location_info", {})
+
+    if not location_info.get("enabled"):
+        return ""
+
+    node_info = model.get("node_info", {})
+
+    primary_port_id = get_primary_port_id(model)
+    primary_node = {}
+
+    if primary_port_id is not None:
+        primary_node = (
+            model.get("nodes", {}).get(primary_port_id, {})
+        )
+
+    primary_role = (
+        primary_node.get("role")
+        or model.get("node", {}).get("type")
+        or "simplex"
+    )
+
+    rx_frequency = str(
+        node_info.get("rx_freq") or ""
+    ).strip()
+
+    tx_frequency = str(
+        node_info.get("tx_freq") or ""
+    ).strip()
+
+    try:
+        tx_offset = round(
+            (
+                float(rx_frequency)
+                - float(tx_frequency)
+            )
+            * 1000
+        )
+    except (TypeError, ValueError):
+        tx_offset = 0
+
+    tx_power = str(
+        node_info.get("tx_power") or "0"
+    ).strip()
+
+    for suffix in (
+        "Watts",
+        "Watt",
+        "watts",
+        "watt",
+        "W",
+        "w",
+    ):
+        if tx_power.endswith(suffix):
+            tx_power = tx_power[:-len(suffix)].strip()
+            break
+
+    antenna_direction = str(
+        node_info.get("antenna_direction") or "omni"
+    ).strip().lower()
+
+    if antenna_direction == "omni":
+        antenna_direction = "-1"
+
+    antenna_height = str(
+        node_info.get("antenna_height") or "0"
+    ).strip()
+
+    antenna_height_unit = str(
+        location_info.get("antenna_height_unit") or "m"
+    ).strip().lower()
+
+    if antenna_height_unit not in ("m", "feet"):
+        antenna_height_unit = "m"
+
+    antenna_height = (
+        f"{antenna_height}{antenna_height_unit}"
+    )
+
+    advertised_ctcss = str(
+        location_info.get("advertised_ctcss") or ""
+    ).strip()
+
+    tone = advertised_ctcss or "0"
+
+    symbol = (
+        "/r"
+        if primary_role == "repeater"
+        else "/n"
+    )
+
+    publish_echolink_status = bool(
+        location_info.get("publish_echolink_status")
+    )
+
+    echolink_enabled = bool(
+        model.get("echolink", {}).get("enabled")
+    )
+
+    status_server = str(
+        location_info.get("status_server_list")
+        or "aprs.echolink.org:5199"
+    ).strip()
+
+    if publish_echolink_status and echolink_enabled:
+        status_server_line = (
+            f"STATUS_SERVER_LIST={status_server}"
+        )
+    else:
+        status_server_line = (
+            f"#STATUS_SERVER_LIST={status_server}"
+        )
+
+    comment = str(
+        location_info.get("comment") or ""
+    ).strip()
+
+    comment_line = (
+        f"COMMENT={comment}"
+        if comment
+        else "#COMMENT=SvxLink Node"
+    )
+
+    return render_config_template(
+        "location_info.template",
+        {
+            "STATUS_SERVER_LINE": status_server_line,
+            "APRS_SERVER_LIST": str(
+                location_info.get("aprs_server_list") or ""
+            ).strip(),
+            "LON_POSITION": str(
+                node_info.get("long_dms") or ""
+            ).strip(),
+            "LAT_POSITION": str(
+                node_info.get("lat_dms") or ""
+            ).strip(),
+            "CALLSIGN": get_location_info_callsign(model),
+            "FREQUENCY": tx_frequency or "0",
+            "TX_OFFSET": tx_offset,
+            "TX_POWER": tx_power or "0",
+            "ANTENNA_GAIN": str(
+                location_info.get("antenna_gain") or "0"
+            ).strip(),
+            "ANTENNA_HEIGHT": antenna_height,
+            "ANTENNA_DIR": antenna_direction,
+            "BEACON_INTERVAL": location_info.get(
+                "beacon_interval",
+                10,
+            ),
+            "SYMBOL": symbol,
+            "TONE": tone,
+            "PRIMARY_LOGIC": get_primary_logic_name(model),
+            "COMMENT_LINE": comment_line,
+        },
+    )
+
 def render_reflector_logic(model):
     """
     Render ReflectorLogic section if enabled.
@@ -1142,7 +1370,6 @@ def render_reflector_logic(model):
             "DEFAULT_LANG": get_default_language(model),
         }
     )
-
 
 def render_link_to_reflector(model):
     """

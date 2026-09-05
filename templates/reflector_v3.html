@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en" class="light-theme">
+<head>
+    <meta charset="UTF-8">
+    <title>Protocol 3 Reflector</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='svxlink.ico') }}">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <div class="page-header">
+            <img class="page-icon"
+                 src="{{ url_for('static', filename='svxlink.ico') }}"
+                 alt="SvxLink icon">
+
+            <div class="page-heading">
+                <h1>Protocol 3 Reflector</h1>
+                <p>
+                    Enter the reflector connection information and the
+                    identity details required for X.509 certification.
+                </p>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h3>Installation and certificate identity</h3>
+
+            <p>
+                The certificate request and reflector connection will use
+                <strong>{{ primary_callsign }}</strong>
+                as the installation callsign.
+            </p>
+
+            <p>
+                Changing this callsign after certification may generate a new
+                certificate request requiring approval by the reflector
+                administrator.
+            </p>
+        </div>
+
+        <div class="note">
+            The reflector administrator should provide the hostname or IP
+            address and port. The reflector server certificate must identify
+            that same hostname or IP address. A mismatch cannot be corrected
+            in this client configuration.
+        </div>
+
+        <div class="note">
+            On the first connection, SvxLink generates a private key and
+            certificate signing request. The reflector administrator reviews
+            and approves that request. Access may initially be denied while
+            the request is awaiting approval.
+        </div>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for(
+                          'reflector_v3_page',
+                          reconfigure='1'
+                      ) if request.args.get('reconfigure') == '1'
+                      else url_for('reflector_v3_page') }}"
+              method="post">
+
+            {% if request.args.get("reconfigure") == "1" %}
+                <input type="hidden" name="reconfigure" value="1">
+            {% endif %}
+
+            <div class="form-section">
+                <div class="label">Reflector connection</div>
+
+                <div class="field-group">
+                    <label class="label" for="name">
+                        Reflector name
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="name"
+                           name="name"
+                           value="{{ v3.get('name') or '' }}"
+                           placeholder="Example Protocol 3 Reflector">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="host">
+                        Reflector hostname or IP address
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="host"
+                           name="host"
+                           value="{{ v3.get('host') or '' }}"
+                           placeholder="reflector.example.net or 192.0.2.10"
+                           autocomplete="off">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="port">
+                        Reflector port
+                    </label>
+
+                    <input class="input-field"
+                           type="number"
+                           id="port"
+                           name="port"
+                           min="1"
+                           max="65535"
+                           value="{{ v3.get('port') or 35300 }}">
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="label">Certificate subject information</div>
+
+                <div class="note">
+                    Enter accurate operator information. These details are
+                    included in the certificate signing request reviewed by
+                    the reflector administrator.
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="given_name">
+                        Given name
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="given_name"
+                           name="given_name"
+                           value="{{ subject.get('given_name') or '' }}"
+                           autocomplete="given-name">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="surname">
+                        Surname
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="surname"
+                           name="surname"
+                           value="{{ subject.get('surname') or '' }}"
+                           autocomplete="family-name">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="organizational_unit">
+                        Organizational unit
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="organizational_unit"
+                           name="organizational_unit"
+                           value="{{ subject.get(
+                                        'organizational_unit'
+                                    ) or 'SvxLink' }}">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="organization">
+                        Organization
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="organization"
+                           name="organization"
+                           value="{{ subject.get('organization') or '' }}"
+                           placeholder="Club, group or organization">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="locality">
+                        Town or locality
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="locality"
+                           name="locality"
+                           value="{{ subject.get('locality') or '' }}"
+                           autocomplete="address-level2">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="state_or_province">
+                        County, state or province
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="state_or_province"
+                           name="state_or_province"
+                           value="{{ subject.get(
+                                        'state_or_province'
+                                    ) or '' }}"
+                           autocomplete="address-level1">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="country">
+                        Two-letter country code
+                    </label>
+
+                    <input class="input-field"
+                           type="text"
+                           id="country"
+                           name="country"
+                           minlength="2"
+                           maxlength="2"
+                           value="{{ subject.get('country') or '' }}"
+                           placeholder="GB"
+                           autocomplete="country">
+                </div>
+
+                <div class="field-group">
+                    <label class="label" for="email">
+                        Certificate email address
+                    </label>
+
+                    <input class="input-field"
+                           type="email"
+                           id="email"
+                           name="email"
+                           value="{{ subject.get('email') or '' }}"
+                           autocomplete="email">
+                </div>
+            </div>
+
+            <div class="info-box">
+                <h3>Talkgroup configuration</h3>
+
+                <p>
+                    Default and monitored talkgroups are configured later from
+                    the main dashboard Talkgroups page. They are not required
+                    to establish the initial reflector connection.
+                </p>
+
+                <p>
+                    The initial configuration uses a default talkgroup of 0
+                    and no monitored talkgroups. These settings can be changed
+                    after the installation has been built.
+                </p>
+            </div>
+
+            <div class="button-row">
+                <a class="button-secondary"
+                   href="{{ url_for(
+                              'reflector_page',
+                              reconfigure='1'
+                          ) if request.args.get('reconfigure') == '1'
+                          else url_for('reflector_page') }}">
+                    Back
+                </a>
+
+                <button class="button-primary" type="submit">
+                    Save and Continue
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <footer class="site-footer">
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
+    </footer>
+</main>
+</body>
+</html>
