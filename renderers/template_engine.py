@@ -14,7 +14,8 @@ This module contains no SvxLink policy.
 from pathlib import Path
 
 
-APP_ROOT = Path("/opt/dashboard")
+APP_ROOT = Path(__file__).resolve().parent.parent
+
 CONFIG_TEMPLATE_DIR = APP_ROOT / "templates" / "config"
 
 

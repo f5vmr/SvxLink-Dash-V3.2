@@ -89,6 +89,9 @@ from services.gpio_service import (
     update_model_gpiod_discovery,
 )
 from services.node_info_service import write_node_info_json
+from services.node_info_validation import (
+    validate_node_information,
+)
 from renderers.svxlink_renderer import (
     get_primary_callsign,
     render_echolink_module,
@@ -3394,100 +3397,6 @@ def reflector_v3_page():
         error=error,
         version_info=get_version_info(),
     )
-
-@app.route("/node-info", methods=["GET", "POST"])
-def node_info_page():
-
-    model = load_node_model()
-
-    if "node_info" not in model:
-        model["node_info"] = {}
-
-    node_info = model["node_info"]
-
-    error = None
-
-    if request.method == "POST":
-
-        node_info["nodeLocation"] = request.form.get(
-            "node_location",
-            ""
-        ).strip()
-
-        node_info["qth_name"] = request.form.get(
-            "qth_name",
-            ""
-        ).strip()
-
-        node_info["sysop"] = request.form.get(
-            "sysop",
-            ""
-        ).strip().upper()
-
-        node_info["lat"] = request.form.get(
-            "lat",
-            ""
-        ).strip()
-
-        node_info["long"] = request.form.get(
-            "long",
-            ""
-        ).strip()
-
-        node_info["locator"] = request.form.get(
-            "locator",
-            ""
-        ).strip().upper()
-
-        node_info["lat_dms"] = request.form.get(
-            "lat_dms",
-            ""
-        ).strip()
-
-        node_info["long_dms"] = request.form.get(
-            "long_dms",
-            ""
-        ).strip()
-
-        node_info["rx_freq"] = request.form.get(
-            "rx_freq",
-            ""
-        ).strip()
-
-        node_info["tx_freq"] = request.form.get(
-            "tx_freq",
-            ""
-        ).strip()
-
-        node_info["tx_power"] = request.form.get(
-            "tx_power",
-            ""
-        ).strip()
-
-        node_info["antenna"] = request.form.get(
-            "antenna",
-            ""
-        ).strip()
-
-        node_info["antenna_height"] = request.form.get(
-            "antenna_height",
-            ""
-        ).strip()
-
-        node_info["antenna_direction"] = request.form.get(
-            "antenna_direction",
-            ""
-        ).strip()
-
-        save_node_model(model)
-
-        return redirect(url_for("setup_auth_page"))
-
-    return render_template(
-        "node_info.html",
-        node_info=node_info,
-        error=error,
-    )
 ## Wifi
 @app.route("/wifi", methods=["GET", "POST"])
 def wifi_page():
@@ -3536,6 +3445,237 @@ def wifi_page():
         password=password,
     )
 ## End Wifi
+@app.route("/node-info", methods=["GET", "POST"])
+def node_info_page():
+
+    model = load_node_model()
+
+    if "node_info" not in model:
+        model["node_info"] = {}
+
+    node_info = model["node_info"]
+
+    location_info = model.setdefault(
+        "location_info",
+        {},
+    )
+
+    echolink_enabled = bool(
+        model.get("echolink", {}).get("enabled")
+    )
+
+    error = None
+
+    if request.method == "POST":
+
+        node_info = update_node_information_from_form(
+            model,
+            request.form,
+        )
+
+        location_info = (
+            update_location_information_from_form(
+                model,
+                request.form,
+            )
+        )
+
+        validation_errors = validate_node_information(
+            node_info,
+            location_info,
+        )
+
+        if validation_errors:
+            error = " ".join(validation_errors)
+        else:
+            save_node_model(model)
+            return redirect(url_for("setup_auth_page"))
+
+    return render_template(
+        "node_info.html",
+        node_info=node_info,
+        location_info=location_info,
+        echolink_enabled=echolink_enabled,
+        error=error,
+    )
+
+def update_node_information_from_form(model, form):
+    """
+    Update the shared node-information model from either the setup
+    form or the protected runtime editing form.
+    """
+
+    node_info = model.setdefault("node_info", {})
+
+    node_info["nodeLocation"] = str(
+        form.get("node_location") or ""
+    ).strip()
+
+    node_info["qth_name"] = str(
+        form.get("qth_name") or ""
+    ).strip()
+
+    node_info["sysop"] = str(
+        form.get("sysop") or ""
+    ).strip().upper()
+
+    node_info["lat"] = str(
+        form.get("lat") or ""
+    ).strip()
+
+    node_info["long"] = str(
+        form.get("long") or ""
+    ).strip()
+
+    node_info["locator"] = str(
+        form.get("locator") or ""
+    ).strip().upper()
+
+    node_info["lat_dms"] = str(
+        form.get("lat_dms") or ""
+    ).strip().upper()
+
+    node_info["long_dms"] = str(
+        form.get("long_dms") or ""
+    ).strip().upper()
+
+    node_info["rx_freq"] = str(
+        form.get("rx_freq") or ""
+    ).strip()
+
+    node_info["tx_freq"] = str(
+        form.get("tx_freq") or ""
+    ).strip()
+
+    node_info["tx_power"] = str(
+        form.get("tx_power") or ""
+    ).strip()
+
+    node_info["antenna"] = str(
+        form.get("antenna") or ""
+    ).strip()
+
+    node_info["antenna_height"] = str(
+        form.get("antenna_height") or ""
+    ).strip()
+
+    node_info["antenna_direction"] = str(
+        form.get("antenna_direction") or ""
+    ).strip()
+
+    # Dashboard-generated node information is always public.
+    node_info["hidden"] = False
+
+    model["node_info"] = node_info
+
+    return node_info
+
+def update_location_information_from_form(model, form):
+    """
+    Update installation-wide LocationInfo settings from either the
+    setup form or the protected runtime editing form.
+
+    Validation is performed separately.
+    """
+
+    location_info = model.setdefault(
+        "location_info",
+        {},
+    )
+
+    location_info["enabled"] = (
+        form.get("location_info_enabled") == "yes"
+    )
+
+    location_info["aprs_server_list"] = str(
+        form.get("aprs_server_list") or ""
+    ).strip()
+
+    location_info["publish_echolink_status"] = (
+        form.get("publish_echolink_status") == "yes"
+    )
+
+    location_info["status_server_list"] = str(
+        form.get("status_server_list")
+        or "aprs.echolink.org:5199"
+    ).strip()
+
+    offset_selection = str(
+        form.get("tx_offset_khz") or "0"
+    ).strip()
+
+    if offset_selection == "custom":
+        offset_value = str(
+            form.get("custom_tx_offset_khz") or ""
+        ).strip()
+    else:
+        offset_value = offset_selection
+
+    try:
+        numeric_offset = float(offset_value)
+
+        if numeric_offset.is_integer():
+            location_info["tx_offset_khz"] = int(
+                numeric_offset
+            )
+        else:
+            location_info["tx_offset_khz"] = offset_value
+
+    except (TypeError, ValueError):
+        location_info["tx_offset_khz"] = offset_value
+
+    location_info["narrow"] = True
+
+    location_info["antenna_gain"] = str(
+        form.get("antenna_gain") or ""
+    ).strip()
+
+    antenna_height_unit = str(
+        form.get("antenna_height_unit") or "m"
+    ).strip().lower()
+
+    if antenna_height_unit not in ("m", "feet"):
+        antenna_height_unit = "m"
+
+    location_info["antenna_height_unit"] = (
+        antenna_height_unit
+    )
+
+    location_info["advertised_ctcss"] = str(
+        form.get("advertised_ctcss") or ""
+    ).strip()
+
+    beacon_interval = str(
+        form.get("beacon_interval") or "10"
+    ).strip()
+
+    try:
+        numeric_beacon_interval = float(
+            beacon_interval
+        )
+
+        if numeric_beacon_interval.is_integer():
+            location_info["beacon_interval"] = int(
+                numeric_beacon_interval
+            )
+        else:
+            location_info["beacon_interval"] = (
+                beacon_interval
+            )
+
+    except (TypeError, ValueError):
+        location_info["beacon_interval"] = (
+            beacon_interval
+        )
+
+    location_info["comment"] = str(
+        form.get("location_comment") or ""
+    ).strip()
+
+    model["location_info"] = location_info
+
+    return location_info
+
 @app.route("/edit/node-info", methods=["GET", "POST"])
 def node_info_edit_page():
     saved = request.args.get("saved") == "1"
@@ -3548,36 +3688,58 @@ def node_info_edit_page():
         model["node_info"] = {}
 
     node_info = model["node_info"]
+
+    location_info = model.setdefault(
+        "location_info",
+        {},
+    )
+
+    echolink_enabled = bool(
+        model.get("echolink", {}).get("enabled")
+    )
+
     error = None
 
     if request.method == "POST":
 
-        node_info["nodeLocation"] = request.form.get("node_location", "").strip()
-        node_info["qth_name"] = request.form.get("qth_name", "").strip()
-        node_info["sysop"] = request.form.get("sysop", "").strip().upper()
-        node_info["lat"] = request.form.get("lat", "").strip()
-        node_info["long"] = request.form.get("long", "").strip()
-        node_info["locator"] = request.form.get("locator", "").strip().upper()
-        node_info["lat_dms"] = request.form.get("lat_dms", "").strip()
-        node_info["long_dms"] = request.form.get("long_dms", "").strip()
-        node_info["rx_freq"] = request.form.get("rx_freq", "").strip()
-        node_info["tx_freq"] = request.form.get("tx_freq", "").strip()
-        node_info["tx_power"] = request.form.get("tx_power", "").strip()
-        node_info["antenna"] = request.form.get("antenna", "").strip()
-        node_info["antenna_height"] = request.form.get("antenna_height", "").strip()
-        node_info["antenna_direction"] = request.form.get("antenna_direction", "").strip()
+        node_info = update_node_information_from_form(
+            model,
+            request.form,
+        )
 
-        save_node_model(model)
-        write_node_info_json(model)
-        restart_svxlink()
+        location_info = (
+            update_location_information_from_form(
+                model,
+                request.form,
+            )
+        )
 
-        return redirect(url_for("node_info_edit_page",saved="1"))
+        validation_errors = validate_node_information(
+            node_info,
+            location_info,
+        )
+
+        if validation_errors:
+            error = " ".join(validation_errors)
+        else:
+            save_node_model(model)
+            write_node_info_json(model)
+            restart_svxlink()
+
+            return redirect(
+                url_for(
+                    "node_info_edit_page",
+                    saved="1",
+                )
+            )
 
     return render_template(
         "node_info_edit.html",
         node_info=node_info,
+        location_info=location_info,
+        echolink_enabled=echolink_enabled,
         error=error,
-        saved=saved
+        saved=saved,
     )
 
 @app.route("/review", methods=["GET", "POST"])

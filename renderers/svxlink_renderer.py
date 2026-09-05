@@ -1184,14 +1184,11 @@ def render_location_info(model):
         return ""
 
     node_info = model.get("node_info", {})
-
     primary_port_id = get_primary_port_id(model)
     primary_node = {}
 
     if primary_port_id is not None:
-        primary_node = (
-            model.get("nodes", {}).get(primary_port_id, {})
-        )
+        primary_node = model.get("nodes", {}).get(primary_port_id, {})
 
     primary_role = (
         primary_node.get("role")
@@ -1199,28 +1196,28 @@ def render_location_info(model):
         or "simplex"
     )
 
-    rx_frequency = str(
-        node_info.get("rx_freq") or ""
+    tx_frequency = str(
+        node_info.get("tx_freq")
+        or primary_node.get("tx_freq")
+        or ""
     ).strip()
 
-    tx_frequency = str(
-        node_info.get("tx_freq") or ""
-    ).strip()
+    tx_offset_raw = location_info.get("tx_offset_khz", 0)
 
     try:
-        tx_offset = round(
-            (
-                float(rx_frequency)
-                - float(tx_frequency)
-            )
-            * 1000
-        )
+        tx_offset = int(tx_offset_raw)
     except (TypeError, ValueError):
-        tx_offset = 0
+        try:
+            tx_offset = int(float(str(tx_offset_raw).strip()))
+        except (TypeError, ValueError):
+            tx_offset = 0
 
-    tx_power = str(
-        node_info.get("tx_power") or "0"
-    ).strip()
+    if tx_offset == 0:
+        tx_offset_value = "0"
+    else:
+        tx_offset_value = f"{tx_offset:+d}"
+
+    tx_power = str(node_info.get("tx_power") or "0").strip()
 
     for suffix in (
         "Watts",
@@ -1234,16 +1231,19 @@ def render_location_info(model):
             tx_power = tx_power[:-len(suffix)].strip()
             break
 
+    if tx_power in ("", "None"):
+        tx_power = "0"
+
     antenna_direction = str(
         node_info.get("antenna_direction") or "omni"
     ).strip().lower()
 
-    if antenna_direction == "omni":
+    if not antenna_direction or antenna_direction == "omni":
         antenna_direction = "-1"
 
-    antenna_height = str(
-        node_info.get("antenna_height") or "0"
-    ).strip()
+    antenna_height = str(node_info.get("antenna_height") or "0").strip()
+    if not antenna_height:
+        antenna_height = "0"
 
     antenna_height_unit = str(
         location_info.get("antenna_height_unit") or "m"
@@ -1252,48 +1252,40 @@ def render_location_info(model):
     if antenna_height_unit not in ("m", "feet"):
         antenna_height_unit = "m"
 
-    antenna_height = (
-        f"{antenna_height}{antenna_height_unit}"
-    )
+    antenna_height_value = f"{antenna_height}{antenna_height_unit}"
 
     advertised_ctcss = str(
         location_info.get("advertised_ctcss") or ""
     ).strip()
-
     tone = advertised_ctcss or "0"
 
-    symbol = (
-        "/r"
-        if primary_role == "repeater"
-        else "/n"
-    )
+    symbol = "/r" if primary_role == "repeater" else "/n"
 
+    echolink_enabled = bool(model.get("echolink", {}).get("enabled"))
     publish_echolink_status = bool(
         location_info.get("publish_echolink_status")
     )
-
-    echolink_enabled = bool(
-        model.get("echolink", {}).get("enabled")
-    )
-
     status_server = str(
-        location_info.get("status_server_list")
-        or "aprs.echolink.org:5199"
+        location_info.get("status_server_list") or ""
     ).strip()
 
-    if publish_echolink_status and echolink_enabled:
-        status_server_line = (
-            f"STATUS_SERVER_LIST={status_server}"
-        )
+    if publish_echolink_status and echolink_enabled and status_server:
+        status_server_line = f"STATUS_SERVER_LIST={status_server}"
     else:
         status_server_line = (
             f"#STATUS_SERVER_LIST={status_server}"
+            if status_server
+            else "#STATUS_SERVER_LIST="
         )
 
-    comment = str(
-        location_info.get("comment") or ""
-    ).strip()
+    aprs_server = str(location_info.get("aprs_server_list") or "").strip()
+    aprs_server_line = (
+        f"APRS_SERVER_LIST={aprs_server}"
+        if aprs_server
+        else "#APRS_SERVER_LIST="
+    )
 
+    comment = str(location_info.get("comment") or "").strip()
     comment_line = (
         f"COMMENT={comment}"
         if comment
@@ -1304,28 +1296,17 @@ def render_location_info(model):
         "location_info.template",
         {
             "STATUS_SERVER_LINE": status_server_line,
-            "APRS_SERVER_LIST": str(
-                location_info.get("aprs_server_list") or ""
-            ).strip(),
-            "LON_POSITION": str(
-                node_info.get("long_dms") or ""
-            ).strip(),
-            "LAT_POSITION": str(
-                node_info.get("lat_dms") or ""
-            ).strip(),
+            "APRS_SERVER_LINE": aprs_server_line,
+            "LON_POSITION": str(node_info.get("long_dms") or "").strip(),
+            "LAT_POSITION": str(node_info.get("lat_dms") or "").strip(),
             "CALLSIGN": get_location_info_callsign(model),
             "FREQUENCY": tx_frequency or "0",
-            "TX_OFFSET": tx_offset,
+            "TX_OFFSET": tx_offset_value,
             "TX_POWER": tx_power or "0",
-            "ANTENNA_GAIN": str(
-                location_info.get("antenna_gain") or "0"
-            ).strip(),
-            "ANTENNA_HEIGHT": antenna_height,
+            "ANTENNA_GAIN": str(location_info.get("antenna_gain") or "0").strip(),
+            "ANTENNA_HEIGHT": antenna_height_value,
             "ANTENNA_DIR": antenna_direction,
-            "BEACON_INTERVAL": location_info.get(
-                "beacon_interval",
-                10,
-            ),
+            "BEACON_INTERVAL": location_info.get("beacon_interval", 10),
             "SYMBOL": symbol,
             "TONE": tone,
             "PRIMARY_LOGIC": get_primary_logic_name(model),
@@ -1455,11 +1436,21 @@ def render_multiport_svxlink_config(model):
         if reflector_enabled
         else "#LINKS=LinkToReflector"
     )
+    location_info_enabled = bool(
+        model.get("location_info", {}).get("enabled")
+    )
 
+    location_info_line = (
+        "LOCATION_INFO=LocationInfo"
+        if location_info_enabled
+        else "#LOCATION_INFO=LocationInfo"
+    )
     values = {
         "LOGIC_CORE_PATH": get_library_path(),
         "LOGICS": ",".join(global_logics),
         "LINKS_LINE": links_line,
+        "LOCATION_INFO_LINE": location_info_line,
+        "LOCATION_INFO_SECTION": render_location_info(model),
 
         "ACTIVE_LOGIC_SECTION": logic_result["sections"],
 
@@ -1526,11 +1517,21 @@ def render_svxlink_config(model):
         if reflector_enabled
         else "#LINKS=LinkToReflector"
     )
+    location_info_enabled = bool(
+        model.get("location_info", {}).get("enabled")
+    )
 
+    location_info_line = (
+        "LOCATION_INFO=LocationInfo"
+        if location_info_enabled
+        else "#LOCATION_INFO=LocationInfo"
+    )
     values = {
         "LOGIC_CORE_PATH": get_library_path(),
         "LOGICS": logics,
         "LINKS_LINE": links_line,
+        "LOCATION_INFO_LINE": location_info_line,
+        "LOCATION_INFO_SECTION": render_location_info(model),
 
         "ACTIVE_LOGIC_SECTION": render_active_logic(model),
 

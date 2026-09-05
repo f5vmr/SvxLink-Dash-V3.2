@@ -1,0 +1,331 @@
+{% set current_offset = location_info.get("tx_offset_khz", 0)|string %}
+{% set standard_offsets = [
+    "0",
+    "600",
+    "-600",
+    "1600",
+    "-1600",
+    "5000",
+    "-5000",
+    "7600",
+    "-7600",
+    "9000",
+    "-9000",
+    "9400",
+    "-9400"
+] %}
+{% set custom_offset = current_offset not in standard_offsets %}
+
+<div class="form-section">
+    <div class="label">SvxLink LocationInfo and APRS</div>
+
+    <div class="note">
+        LocationInfo is optional. When enabled, SvxLink publishes the
+        primary installation identity and RF information to the configured
+        APRS service. Multi-port installations use the selected primary
+        port. The public node information entered above is still used to
+        generate node_info.json.
+    </div>
+
+    <div class="field-group">
+        <div class="label">Enable LocationInfo</div>
+
+        <label>
+            <input
+                type="radio"
+                name="location_info_enabled"
+                value="yes"
+                {% if location_info.get("enabled", false) %}checked{% endif %}
+            >
+            Enable LocationInfo and APRS publication
+        </label>
+
+        <br>
+
+        <label>
+            <input
+                type="radio"
+                name="location_info_enabled"
+                value="no"
+                {% if not location_info.get("enabled", false) %}checked{% endif %}
+            >
+            Do not enable LocationInfo
+        </label>
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="aprs_server_list">
+            APRS server
+        </label>
+
+        <input
+            class="input-field"
+            id="aprs_server_list"
+            name="aprs_server_list"
+            type="text"
+            value="{{ location_info.get('aprs_server_list', '') }}"
+            placeholder="rotate.aprs2.net:14580"
+        >
+
+        <div class="note">
+            Enter the APRS-IS server and port supplied or recommended
+            for your region. This is required only when LocationInfo is
+            enabled.
+        </div>
+    </div>
+
+    <div class="field-group">
+        <div class="label">EchoLink status publication</div>
+
+        {% if echolink_enabled %}
+            <label>
+                <input
+                    type="checkbox"
+                    name="publish_echolink_status"
+                    value="yes"
+                    {% if location_info.get("publish_echolink_status", false) %}checked{% endif %}
+                >
+                Publish this installation as an EchoLink object
+            </label>
+
+            <div class="note">
+                The LocationInfo callsign will automatically use the
+                appropriate EL- or ER- prefix from the configured EchoLink
+                callsign.
+            </div>
+        {% else %}
+            <div class="note">
+                EchoLink is not enabled. EchoLink object and status
+                publication is therefore unavailable.
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="status_server_list">
+            EchoLink status server
+        </label>
+
+        <input
+            class="input-field"
+            id="status_server_list"
+            name="status_server_list"
+            type="text"
+            value="{{ location_info.get(
+                'status_server_list',
+                'aprs.echolink.org:5199'
+            ) }}"
+            placeholder="aprs.echolink.org:5199"
+        >
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="tx_offset_khz">
+            Transmitter offset
+        </label>
+
+        <select
+            class="input-field"
+            id="tx_offset_khz"
+            name="tx_offset_khz"
+        >
+            <option value="0"
+                    {% if current_offset == "0" %}selected{% endif %}>
+                0 kHz — simplex
+            </option>
+
+            <option value="600"
+                    {% if current_offset == "600" %}selected{% endif %}>
+                +600 kHz
+            </option>
+
+            <option value="-600"
+                    {% if current_offset == "-600" %}selected{% endif %}>
+                -600 kHz
+            </option>
+
+            <option value="1600"
+                    {% if current_offset == "1600" %}selected{% endif %}>
+                +1.6 MHz
+            </option>
+
+            <option value="-1600"
+                    {% if current_offset == "-1600" %}selected{% endif %}>
+                -1.6 MHz
+            </option>
+
+            <option value="5000"
+                    {% if current_offset == "5000" %}selected{% endif %}>
+                +5 MHz
+            </option>
+
+            <option value="-5000"
+                    {% if current_offset == "-5000" %}selected{% endif %}>
+                -5 MHz
+            </option>
+
+            <option value="7600"
+                    {% if current_offset == "7600" %}selected{% endif %}>
+                +7.6 MHz
+            </option>
+
+            <option value="-7600"
+                    {% if current_offset == "-7600" %}selected{% endif %}>
+                -7.6 MHz
+            </option>
+
+            <option value="9000"
+                    {% if current_offset == "9000" %}selected{% endif %}>
+                +9 MHz
+            </option>
+
+            <option value="-9000"
+                    {% if current_offset == "-9000" %}selected{% endif %}>
+                -9 MHz
+            </option>
+
+            <option value="9400"
+                    {% if current_offset == "9400" %}selected{% endif %}>
+                +9.4 MHz
+            </option>
+
+            <option value="-9400"
+                    {% if current_offset == "-9400" %}selected{% endif %}>
+                -9.4 MHz
+            </option>
+
+            <option value="custom"
+                    {% if custom_offset %}selected{% endif %}>
+                Custom signed offset
+            </option>
+        </select>
+
+        <div class="note">
+            Select the objective signed repeater offset for the applicable
+            regional band plan. The dashboard does not calculate this value
+            from the entered frequencies.
+        </div>
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="custom_tx_offset_khz">
+            Custom transmitter offset, kHz
+        </label>
+
+        <input
+            class="input-field"
+            id="custom_tx_offset_khz"
+            name="custom_tx_offset_khz"
+            type="number"
+            step="1"
+            value="{% if custom_offset %}{{ current_offset }}{% endif %}"
+            placeholder="Signed whole number, for example -7600"
+        >
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="antenna_gain">
+            Antenna gain, dBd
+        </label>
+
+        <input
+            class="input-field"
+            id="antenna_gain"
+            name="antenna_gain"
+            type="number"
+            step="0.1"
+            value="{{ location_info.get('antenna_gain', '') }}"
+            placeholder="0"
+        >
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="antenna_height_unit">
+            Antenna height unit
+        </label>
+
+        <select
+            class="input-field"
+            id="antenna_height_unit"
+            name="antenna_height_unit"
+        >
+            <option
+                value="m"
+                {% if location_info.get("antenna_height_unit", "m") == "m" %}selected{% endif %}
+            >
+                Metres
+            </option>
+
+            <option
+                value="feet"
+                {% if location_info.get("antenna_height_unit", "m") == "feet" %}selected{% endif %}
+            >
+                Feet
+            </option>
+        </select>
+
+        <div class="note">
+            Antenna height means height above the surrounding terrain.
+        </div>
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="advertised_ctcss">
+            Advertised CTCSS
+        </label>
+
+        <input
+            class="input-field"
+            id="advertised_ctcss"
+            name="advertised_ctcss"
+            type="text"
+            value="{{ location_info.get('advertised_ctcss', '') }}"
+            placeholder="Leave empty for none"
+        >
+
+        <div class="note">
+            Enter one CTCSS access frequency to advertise, or leave this
+            empty to render TONE=0. Do not enter the legacy 1750 Hz access
+            tone here.
+        </div>
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="beacon_interval">
+            APRS beacon interval, minutes
+        </label>
+
+        <input
+            class="input-field"
+            id="beacon_interval"
+            name="beacon_interval"
+            type="number"
+            min="1"
+            max="1440"
+            step="1"
+            value="{{ location_info.get('beacon_interval', 10) }}"
+        >
+    </div>
+
+    <div class="field-group">
+        <label class="label" for="location_comment">
+            APRS comment
+        </label>
+
+        <input
+            class="input-field"
+            id="location_comment"
+            name="location_comment"
+            type="text"
+            maxlength="36"
+            value="{{ location_info.get('comment', '') }}"
+            placeholder="Optional, maximum 36 characters"
+        >
+    </div>
+
+    <div class="note">
+        LocationInfo uses NARROW=1. The APRS symbol, installation callsign,
+        primary logic, frequency and power are derived from the information
+        already entered and the selected primary port.
+    </div>
+</div>

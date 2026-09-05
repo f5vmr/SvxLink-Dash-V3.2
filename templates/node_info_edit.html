@@ -49,10 +49,17 @@
         </p>
 
         <p>
-            Use decimal latitude/longitude for node information, for example
-            <strong>55.1809</strong> and <strong>-1.54604</strong>.
-            If you also have degrees/minutes/seconds values, enter them below so
-            SvxLink location strings can be generated later.
+            Enter decimal latitude and longitude for public node information,
+            for example <strong>55.1809</strong> and
+            <strong>-1.54604</strong>.
+        </p>
+
+        <p>
+            LocationInfo also requires coordinates in SvxLink DMS format.
+            Use degrees, minutes and seconds separated by full stops, followed
+            immediately by the compass direction:
+            <strong>55.10.51N</strong> and
+            <strong>01.32.45W</strong>.
         </p>
     </div>
 
@@ -111,7 +118,7 @@
             <input class="input-field"
                    type="text"
                    name="lat_dms"
-                   placeholder="55° 10' 51&quot; N"
+                   placeholder="55.10.51N"
                    value="{{ node_info.lat_dms }}">
         </div>
 
@@ -120,7 +127,7 @@
             <input class="input-field"
                    type="text"
                    name="long_dms"
-                   placeholder="1° 32' 45&quot; W"
+                   placeholder="01.32.45W"
                    value="{{ node_info.long_dms }}">
         </div>
 
@@ -171,6 +178,8 @@
                    name="antenna_direction"
                    value="{{ node_info.antenna_direction }}">
         </div>
+
+        {% include "location_info_fields.html" %}
 
         <div class="button-row">
             <a class="button-secondary"

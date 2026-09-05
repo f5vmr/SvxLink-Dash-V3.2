@@ -10,7 +10,7 @@ LOGICS={{LOGICS}}
 CFG_DIR=svxlink.d
 TIMESTAMP_FORMAT="%c"
 CARD_SAMPLE_RATE=48000
-#LOCATION_INFO=LocationInfo
+{{LOCATION_INFO_LINE}}
 {{LINKS_LINE}}
 
 {{REFLECTOR_LOGIC_SECTION}}
@@ -25,6 +25,13 @@ CARD_SAMPLE_RATE=48000
 # =========================================================
 
 {{LINK_TO_REFLECTOR_SECTION}}
+
+# =========================================================
+# Location Information
+# =========================================================
+
+{{LOCATION_INFO_SECTION}}
+
 # =========================================================
 # Receiver Sections
 # =========================================================
