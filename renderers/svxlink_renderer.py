@@ -3,9 +3,16 @@
 """
 Primary SvxLink configuration renderer for SvxLink-Dash-V3.1.
 """
-from models.node_model import get_installation_tones
+from models.node_model import (
+    get_installation_tones,
+    is_multiport_model,
+)
 from renderers.template_engine import render_config_template
 import platform
+from services.topology_ports import (
+    get_topology_logic_name,
+)
+
 
 # =========================================================
 # System information
@@ -822,7 +829,7 @@ def resolve_gpiod_line(model, node, label):
 
 def render_multiport_logic_sections(model):
     """
-    Render all SimplexLogic/RepeaterLogic sections for enabled ICS ports.
+    Render all radio logic sections for an explicit multi-port model.
     """
 
     nodes = model.get("nodes", {})
@@ -1022,7 +1029,7 @@ def render_port_tx_section(model, port_id, node):
 
 def render_multiport_rx_tx_sections(model):
     """
-    Render all Rx and Tx sections for enabled ICS ports.
+    Render all Rx and Tx sections for an explicit multi-port model.
     """
 
     nodes = model.get("nodes", {})
@@ -1369,7 +1376,12 @@ def render_link_to_reflector(model):
     )
 
     values = {
-        "CONNECT_LOGICS": f"{active_logic_name}:9,ReflectorLogic",
+        "CONNECT_LOGICS": (
+            f"{active_logic_name}:9,"
+            "ReflectorLogic"
+        ),
+        "DEFAULT_ACTIVE": 1,
+        "TIMEOUT": 300,
         "ACTIVATE_ON_ACTIVITY": active_logic_name,
     }
 
@@ -1377,37 +1389,188 @@ def render_link_to_reflector(model):
         "link_to_reflector.template",
         values
     )
-def render_multiport_link_to_reflector(model, active_logics):
+def render_multiport_link_to_reflector(
+    model,
+    active_logics=None,
+):
     """
-    Render LinkToReflector section for ICS multi-port builds.
+    Render the single installation-wide LinkToReflector section.
+
+    Only ports explicitly assigned to the reflector link are
+    connected. ReflectorLogic is added exactly once.
     """
 
     if not model.get("reflector", {}).get("enabled"):
         return ""
 
-    connect_logics = [
-        f"{logic}:9"
-        for logic in active_logics
-        if logic
-    ]
+    topology = model.get("topology", {})
+    reflector_link = topology.get(
+        "reflector_link",
+        {},
+    )
+
+    reflector_ports = reflector_link.get(
+        "ports",
+        [],
+    )
+
+    connect_logics = []
+
+    for port_id in reflector_ports:
+        logic_name = get_topology_logic_name(
+            model,
+            port_id,
+        )
+
+        if logic_name:
+            connect_logics.append(
+                f"{logic_name}:9"
+            )
 
     connect_logics.append("ReflectorLogic")
 
-    activate_on_activity = (
-        active_logics[0]
-        if active_logics
-        else "SimplexLogic"
+    primary_logic = get_primary_logic_name(model)
+
+    default_active = (
+        1
+        if reflector_link.get(
+            "default_active",
+            True,
+        )
+        else 0
+    )
+
+    timeout = reflector_link.get(
+        "timeout",
+        300,
     )
 
     values = {
-        "CONNECT_LOGICS": ",".join(connect_logics),
-        "ACTIVATE_ON_ACTIVITY": activate_on_activity,
+        "CONNECT_LOGICS": ",".join(
+            connect_logics
+        ),
+        "DEFAULT_ACTIVE": default_active,
+        "TIMEOUT": timeout,
+        "ACTIVATE_ON_ACTIVITY": primary_logic,
     }
 
     return render_config_template(
         "link_to_reflector.template",
-        values
+        values,
     )
+def render_local_links(model):
+    """
+    Render every operator-defined local radio link.
+
+    Each member receives command prefix 9, providing 90# to
+    deactivate and 91# to activate the link.
+    """
+
+    topology = model.get("topology", {})
+    local_links = topology.get("local_links", [])
+
+    if not isinstance(local_links, list):
+        return ""
+
+    rendered_links = []
+
+    for local_link in local_links:
+        if not isinstance(local_link, dict):
+            continue
+
+        link_name = str(
+            local_link.get("name") or ""
+        ).strip()
+
+        if not link_name:
+            continue
+
+        member_ports = local_link.get("ports", [])
+
+        if not isinstance(member_ports, list):
+            continue
+
+        connect_logics = []
+
+        for port_id in member_ports:
+            logic_name = get_topology_logic_name(
+                model,
+                port_id,
+            )
+
+            if logic_name:
+                connect_logics.append(
+                    f"{logic_name}:9"
+                )
+
+        if not connect_logics:
+            continue
+
+        default_active = (
+            1
+            if local_link.get(
+                "default_active",
+                True,
+            )
+            else 0
+        )
+
+        timeout = local_link.get("timeout", 300)
+
+        rendered_links.append(
+            render_config_template(
+                "local_link.template",
+                {
+                    "LINK_NAME": link_name,
+                    "CONNECT_LOGICS": ",".join(
+                        connect_logics
+                    ),
+                    "DEFAULT_ACTIVE": default_active,
+                    "TIMEOUT": timeout,
+                },
+            )
+        )
+
+    return "\n\n".join(rendered_links)
+def render_topology_links_line(model):
+    """
+    Render the GLOBAL LINKS setting from the saved topology.
+    """
+
+    topology = model.get("topology", {})
+    link_names = []
+
+    reflector = model.get("reflector", {})
+    reflector_link = topology.get(
+        "reflector_link",
+        {},
+    )
+
+    if (
+        reflector.get("enabled")
+        and isinstance(reflector_link, dict)
+        and reflector_link.get("ports")
+    ):
+        link_names.append("LinkToReflector")
+
+    local_links = topology.get("local_links", [])
+
+    if isinstance(local_links, list):
+        for local_link in local_links:
+            if not isinstance(local_link, dict):
+                continue
+
+            link_name = str(
+                local_link.get("name") or ""
+            ).strip()
+
+            if link_name:
+                link_names.append(link_name)
+
+    if not link_names:
+        return "#LINKS="
+
+    return "LINKS=" + ",".join(link_names)
 def render_multiport_svxlink_config(model):
     """
     Render final svxlink.conf text for ICS multi-port builds.
@@ -1431,11 +1594,10 @@ def render_multiport_svxlink_config(model):
     if reflector_enabled and "ReflectorLogic" not in global_logics:
         global_logics.append("ReflectorLogic")
 
-    links_line = (
-        "LINKS=LinkToReflector"
-        if reflector_enabled
-        else "#LINKS=LinkToReflector"
+    links_line = render_topology_links_line(
+        model
     )
+
     location_info_enabled = bool(
         model.get("location_info", {}).get("enabled")
     )
@@ -1466,6 +1628,10 @@ def render_multiport_svxlink_config(model):
             else ""
         ),
 
+        "LOCAL_LINK_SECTIONS": render_local_links(
+            model
+        ),
+
         "RX_SECTIONS": audio_result["rx_sections"],
         "TX_SECTIONS": audio_result["tx_sections"],
 
@@ -1485,18 +1651,10 @@ def render_svxlink_config(model):
     """
     Render final svxlink.conf text.
     """
-    hardware = model.get("hardware", {})
-
-    profile_id = (
-        model.get("hardware_profile_id")
-        or hardware.get("profile_id")
-        or hardware.get("id")
-        or hardware.get("profile")
-        or ""
-    )
-
-    if hardware.get("family") == "ics" or str(profile_id).startswith("ics_"):
-        return render_multiport_svxlink_config(model)
+    if is_multiport_model(model):
+        return render_multiport_svxlink_config(
+            model
+        )
 
     node_type = model.get("node", {}).get("type")
 
