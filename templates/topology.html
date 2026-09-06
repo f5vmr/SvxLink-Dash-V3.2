@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en" class="light-theme">
+<head>
+    <meta charset="UTF-8">
+    <title>Port Link Topology - SvxLink-Dash-V4.0</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='site.css') }}">
+    <link rel="icon"
+          href="{{ url_for('static', filename='svxlink.ico') }}">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <div class="page-header">
+            <img class="page-icon"
+                 src="{{ url_for('static', filename='svxlink.ico') }}"
+                 alt="SvxLink icon">
+
+            <div class="page-heading">
+                <h1>Port Link Topology</h1>
+                <p>
+                    Review how each enabled radio port participates in
+                    the installation.
+                </p>
+            </div>
+        </div>
+
+        <div class="note">
+            Every enabled port must have exactly one assignment:
+            the reflector link, one local link, or independent operation.
+            A port cannot participate in two links at the same time.
+        </div>
+
+        {% if reflector_enabled %}
+            <div class="form-section">
+                <div class="label">Reflector connection</div>
+
+                <div class="status-box">
+                    <div class="status-box-title">
+                        {{ topology.get("reflector_link", {}).get(
+                            "name",
+                            "LinkToReflector"
+                        ) }}
+                    </div>
+
+                    <div class="status-box-row">
+                        Primary port:
+                        <strong>Port {{ primary_port_id }}</strong>
+                    </div>
+
+                    <div class="status-box-row">
+                        Reflector identity:
+                        <strong>{{ primary_callsign }}</strong>
+                    </div>
+
+                    <div class="status-box-row">
+                        Connected ports:
+                        {% set reflector_ports = topology.get(
+                            "reflector_link",
+                            {}
+                        ).get("ports", []) %}
+
+                        {% if reflector_ports %}
+                            <strong>
+                                {% for port_id in reflector_ports %}
+                                    Port {{ port_id }}{% if not loop.last %}, {% endif %}
+                                {% endfor %}
+                            </strong>
+                        {% else %}
+                            <span class="warning-text">None selected</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="button-row">
+                    <a class="button-secondary"
+                       href="{{
+                           url_for(
+                               'topology_reflector_page',
+                               reconfigure='1'
+                           )
+                           if request.args.get('reconfigure') == '1'
+                           else url_for('topology_reflector_page')
+                       }}">
+                        Change Reflector Ports
+                    </a>
+                </div>
+            </div>
+        {% else %}
+            <div class="note">
+                Reflector operation is disabled. No port may be assigned
+                to <strong>LinkToReflector</strong>.
+            </div>
+        {% endif %}
+
+        <div class="form-section">
+            <div class="label">Local links</div>
+
+            {% set local_links = topology.get("local_links", []) %}
+
+            {% if local_links %}
+                <div class="review-grid">
+                    {% for link in local_links %}
+                        <div class="review-card">
+                            <h3>{{ link.get("name", "Unnamed link") }}</h3>
+
+                            <p>
+                                Ports:
+                                {% set link_ports = link.get("ports", []) %}
+
+                                {% if link_ports %}
+                                    <strong>
+                                        {% for port_id in link_ports %}
+                                            Port {{ port_id }}{% if not loop.last %}, {% endif %}
+                                        {% endfor %}
+                                    </strong>
+                                {% else %}
+                                    <span class="warning-text">
+                                        No ports selected
+                                    </span>
+                                {% endif %}
+                            </p>
+
+                            <p>
+                                Starts active:
+                                <strong>
+                                    {% if link.get("default_active", true) %}
+                                        Yes
+                                    {% else %}
+                                        No
+                                    {% endif %}
+                                </strong>
+                            </p>
+
+                            <p>
+                                Timeout:
+                                <strong>
+                                    {{ link.get("timeout", 300) }} seconds
+                                </strong>
+                            </p>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="note">
+                    No local links have been configured.
+                </div>
+            {% endif %}
+
+            <div class="button-row">
+                <a class="button-primary"
+                   href="{{
+                       url_for(
+                           'topology_local_link_add_page',
+                           reconfigure='1'
+                       )
+                       if request.args.get('reconfigure') == '1'
+                       else url_for(
+                           'topology_local_link_add_page'
+                       )
+                   }}">
+                    Add Local Link
+                </a>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="label">Independent ports</div>
+
+            {% set independent_ports = topology.get(
+                "independent_ports",
+                []
+            ) %}
+
+            {% if independent_ports %}
+                <div class="status-box">
+                    <div class="status-box-row">
+                        {% for port_id in independent_ports %}
+                            Port {{ port_id }}{% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="note">
+                    No ports are currently assigned to independent operation.
+                </div>
+            {% endif %}
+
+            <div class="button-row">
+                <a class="button-primary"
+                   href="{{
+                       url_for(
+                           'topology_independent_page',
+                           reconfigure='1'
+                       )
+                       if request.args.get('reconfigure') == '1'
+                       else url_for(
+                           'topology_independent_page'
+                       )
+                   }}">
+                    Select Independent Ports
+                </a>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="label">Enabled port assignments</div>
+
+            <div class="review-grid">
+                {% for row in port_rows %}
+                    <div class="review-card">
+                        <h3>
+                            Port {{ row.port_id }}
+                            {% if row.is_primary %}
+                                — Primary
+                            {% endif %}
+                        </h3>
+
+                        <p>
+                            Callsign:
+                            <strong>{{ row.callsign or "Not configured" }}</strong>
+                        </p>
+
+                        <p>
+                            Logic:
+                            <strong>{{ row.logic_name }}</strong>
+                        </p>
+
+                        <p>
+                            Assignment:
+                            {% if row.assignments %}
+                                <strong>{{ row.assignments|join(", ") }}</strong>
+                            {% else %}
+                                <span class="warning-text">Unassigned</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% if topology_errors %}
+            <div class="form-section">
+                <div class="label">Topology requires attention</div>
+
+                {% for topology_error in topology_errors %}
+                    <p class="error">{{ topology_error }}</p>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="note">
+                Every enabled port currently has one valid topology assignment.
+            </div>
+        {% endif %}
+
+        <div class="button-row">
+            <a class="button-secondary"
+               href="{{ url_for('reflector_page') }}">
+                Back
+            </a>
+
+            <a class="button-primary"
+               href="{{ url_for('port_final_review_page') }}">
+                Continue
+            </a>
+        </div>
+    </section>
+
+    <footer class="site-footer">
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
+    </footer>
+</main>
+</body>
+</html>

@@ -123,6 +123,85 @@ def merge_missing_defaults(model, defaults=None):
 
     return changed
 
+def normalise_port_ids(model):
+    """Convert integer radio-port references to strings without changing membership.
+
+    Leave malformed values for validation; this is not topology cleanup.
+    JSON object keys (including nodes and port_roles) are already strings.
+    """
+    changed = False
+
+    def normalise_field(container, key):
+        nonlocal changed
+        if not isinstance(container, dict):
+            return
+        value = container.get(key)
+        if isinstance(value, list):
+            normalised = [str(item) if type(item) is int else item for item in value]
+        elif type(value) is int:
+            normalised = str(value)
+        else:
+            return
+        if normalised != value:
+            container[key] = normalised
+            changed = True
+
+    ports = model.get("ports", {})
+    normalise_field(ports, "available")
+    normalise_field(ports, "enabled")
+    normalise_field(model.get("installation", {}), "primary_port_id")
+
+    topology = model.get("topology", {})
+    if isinstance(topology, dict):
+        normalise_field(topology.get("reflector_link", {}), "ports")
+        normalise_field(topology, "independent_ports")
+        local_links = topology.get("local_links", [])
+        if isinstance(local_links, list):
+            for link in local_links:
+                normalise_field(link, "ports")
+
+    return changed
+
+
+def clean_stale_topology_ports(model):
+    """Remove disabled port references when an explicit enabled list exists.
+
+    Retain link definitions, ordering, duplicates and malformed values for
+    topology validation. Missing port selection is not an empty selection.
+    """
+    ports = model.get("ports", {})
+    if not isinstance(ports, dict) or not isinstance(ports.get("enabled"), list):
+        return False
+    enabled = [str(port) for port in ports["enabled"]
+               if isinstance(port, str) or type(port) is int]
+    topology = model.get("topology", {})
+    if not isinstance(topology, dict):
+        return False
+    changed = False
+
+    def clean_members(container, key):
+        nonlocal changed
+        if not isinstance(container, dict):
+            return
+        members = container.get(key)
+        if not isinstance(members, list):
+            return
+        retained = [port for port in members
+                    if not (isinstance(port, str) or type(port) is int)
+                    or str(port) in enabled]
+        if retained != members:
+            container[key] = retained
+            changed = True
+
+    clean_members(topology.get("reflector_link", {}), "ports")
+    clean_members(topology, "independent_ports")
+    local_links = topology.get("local_links", [])
+    if isinstance(local_links, list):
+        for link in local_links:
+            clean_members(link, "ports")
+    return changed
+
+
 def migrate_node_model(model):
     """
     Migrate an existing saved model to the current schema.
@@ -137,8 +216,11 @@ def migrate_node_model(model):
         schema_version = 1
 
     if schema_version >= 2:
-        return merge_missing_defaults(model)
+        changed = merge_missing_defaults(model)
+        changed = normalise_port_ids(model) or changed
+        return clean_stale_topology_ports(model) or changed
 
+    saved_model = deepcopy(model)
     legacy_reflector = deepcopy(model.get("reflector", {}))
     legacy_courtesy = deepcopy(model.get("courtesy", {}))
     legacy_repeater = deepcopy(model.get("repeater", {}))
@@ -243,7 +325,7 @@ def migrate_node_model(model):
     else:
         model["reflector"]["route"] = "none"
 
-    if is_multiport and enabled_ports:
+    if is_multiport and enabled_ports and "topology" not in saved_model:
         if reflector_enabled:
             model["topology"]["reflector_link"]["ports"] = list(
                 enabled_ports
@@ -255,11 +337,20 @@ def migrate_node_model(model):
                 enabled_ports
             )
 
+    # Treat migration-derived values as defaults for partially migrated models.
+    # Explicit saved values (including False, zero, empty lists and extensions)
+    # win over values inferred from legacy fields.
+    merge_missing_defaults(saved_model, model)
+    model.update(saved_model)
     model["schema_version"] = 2
+    normalise_port_ids(model)
+    clean_stale_topology_ports(model)
 
     return True
 
 def save_node_model(model):
+    normalise_port_ids(model)
+    clean_stale_topology_ports(model)
     ensure_config_dir()
 
     MODEL_FILE.write_text(

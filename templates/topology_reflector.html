@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" class="light-theme">
+<head>
+    <meta charset="UTF-8">
+    <title>Reflector Port Membership - SvxLink-Dash-V4.0</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='site.css') }}">
+    <link rel="icon"
+          href="{{ url_for('static', filename='svxlink.ico') }}">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <div class="page-header">
+            <img class="page-icon"
+                 src="{{ url_for('static', filename='svxlink.ico') }}"
+                 alt="SvxLink icon">
+
+            <div class="page-heading">
+                <h1>Reflector Port Membership</h1>
+                <p>
+                    Select the radio ports that will participate in the
+                    installation's single reflector connection.
+                </p>
+            </div>
+        </div>
+
+        <div class="note">
+            The primary port must remain connected to
+            <strong>LinkToReflector</strong>. Additional ports may join
+            the same link at the operator's discretion. This still creates
+            only one <strong>ReflectorLogic</strong> connection using the
+            primary installation callsign.
+        </div>
+
+        <div class="note">
+            Selecting a port here will move it from any local link or
+            independent assignment. A port removed from this reflector
+            link will remain unassigned until another topology assignment
+            is selected.
+        </div>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for('topology_reflector_page') }}"
+              method="post">
+
+            {% if request.args.get("reconfigure") == "1" %}
+                <input type="hidden"
+                       name="reconfigure"
+                       value="1">
+            {% endif %}
+
+            <div class="form-section">
+                <div class="label">
+                    Ports connected to LinkToReflector
+                </div>
+
+                {% for port_id in enabled_ports %}
+                    {% set node = nodes.get(port_id, {}) %}
+                    {% set is_primary = port_id == primary_port_id %}
+                    {% set is_selected = port_id in current_reflector_ports %}
+
+                    <div class="status-box">
+                        <div class="status-box-title">
+                            Port {{ port_id }}
+                            {% if is_primary %}
+                                — Primary
+                            {% endif %}
+                        </div>
+
+                        <div class="status-box-row">
+                            Callsign:
+                            <strong>
+                                {{ node.get("callsign", "Not configured") }}
+                            </strong>
+                        </div>
+
+                        <div class="status-box-row">
+                            Role:
+                            <strong>
+                                {{ node.get("role", "Not configured")|title }}
+                            </strong>
+                        </div>
+
+                        <div class="status-box-row">
+                            <label class="checkbox-row">
+                                <input
+                                    type="checkbox"
+                                    name="reflector_ports"
+                                    value="{{ port_id }}"
+                                    {% if is_selected or is_primary %}checked{% endif %}
+                                    {% if is_primary %}disabled{% endif %}
+                                >
+
+                                {% if is_primary %}
+                                    Compulsory reflector member
+                                {% else %}
+                                    Connect this port to the reflector
+                                {% endif %}
+                            </label>
+
+                            {% if is_primary %}
+                                <input
+                                    type="hidden"
+                                    name="reflector_ports"
+                                    value="{{ port_id }}"
+                                >
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="button-row">
+                <a class="button-secondary"
+                   href="{{ url_for('topology_page') }}">
+                    Cancel
+                </a>
+
+                <button class="button-primary"
+                        type="submit">
+                    Save Reflector Membership
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <footer class="site-footer">
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
+    </footer>
+</main>
+</body>
+</html>

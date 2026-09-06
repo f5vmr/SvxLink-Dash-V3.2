@@ -92,6 +92,13 @@ from services.node_info_service import write_node_info_json
 from services.node_info_validation import (
     validate_node_information,
 )
+from services.topology_ports import (
+    get_topology_ports,
+)
+from services.topology_validation import (
+    validate_local_link_name,
+    validate_topology_membership,
+)
 from renderers.svxlink_renderer import (
     get_primary_callsign,
     render_echolink_module,
@@ -667,7 +674,7 @@ def hardware_ports_page():
         if not ics_prepare.get("verified"):
             return redirect(url_for("ics_prepare_page"))
     port_count = int(profile.get("ports", 1))
-    available_ports = list(range(1, port_count + 1))
+    available_ports = [str(port) for port in range(1, port_count + 1)]
 
     if request.method == "POST":
         selected_ports = request.form.getlist("enabled_ports")
@@ -679,10 +686,10 @@ def hardware_ports_page():
             except ValueError:
                 continue
 
-            if port_number in available_ports:
-                enabled_ports.append(port_number)
+            if str(port_number) in available_ports:
+                enabled_ports.append(str(port_number))
 
-        enabled_ports = sorted(set(enabled_ports))
+        enabled_ports = sorted(set(enabled_ports), key=int)
 
         if not enabled_ports:
             return render_template(
@@ -2004,6 +2011,971 @@ def installation_identity_page():
         enabled_ports=enabled_ports,
         primary_port_id=primary_port_id,
         error=error,
+        version_info=get_version_info(),
+    )
+@app.route(
+    "/topology/independent",
+    methods=["GET", "POST"],
+)
+def topology_independent_page():
+    """
+    Assign currently unlinked ports to independent operation.
+    """
+
+    model = load_node_model()
+
+    if not is_multiport_build(model):
+        return redirect(url_for("review_page"))
+
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    nodes = model.get("nodes", {})
+
+    if not enabled_ports:
+        return redirect(url_for("hardware_ports_page"))
+
+    if not nodes:
+        return redirect(url_for("port_config_page"))
+
+    topology = model.setdefault("topology", {})
+
+    linked_ports = set()
+
+    reflector_link = topology.get(
+        "reflector_link",
+        {},
+    )
+
+    if isinstance(reflector_link, dict):
+        reflector_ports = reflector_link.get(
+            "ports",
+            [],
+        )
+
+        if isinstance(reflector_ports, list):
+            linked_ports.update(
+                str(port_id)
+                for port_id in reflector_ports
+            )
+
+    local_links = topology.get("local_links", [])
+
+    if isinstance(local_links, list):
+        for link in local_links:
+            if not isinstance(link, dict):
+                continue
+
+            link_ports = link.get("ports", [])
+
+            if not isinstance(link_ports, list):
+                continue
+
+            linked_ports.update(
+                str(port_id)
+                for port_id in link_ports
+            )
+
+    available_ports = [
+        port_id
+        for port_id in enabled_ports
+        if port_id not in linked_ports
+    ]
+
+    saved_independent_ports = topology.get(
+        "independent_ports",
+        [],
+    )
+
+    if not isinstance(saved_independent_ports, list):
+        saved_independent_ports = []
+
+    selected_ports = [
+        port_id
+        for port_id in available_ports
+        if port_id in {
+            str(saved_port_id)
+            for saved_port_id in saved_independent_ports
+        }
+    ]
+
+    primary_port_id = str(
+        model.get("installation", {}).get(
+            "primary_port_id"
+        )
+        or ""
+    )
+
+    if not primary_port_id and len(enabled_ports) == 1:
+        primary_port_id = enabled_ports[0]
+
+    error = None
+
+    if request.method == "POST":
+        requested_ports = [
+            str(port_id)
+            for port_id in request.form.getlist(
+                "independent_ports"
+            )
+        ]
+
+        invalid_ports = [
+            port_id
+            for port_id in requested_ports
+            if port_id not in available_ports
+        ]
+
+        if invalid_ports:
+            error = (
+                "The independent-port selection contains a port "
+                "that is unavailable or assigned to a link."
+            )
+
+        else:
+            selected_ports = [
+                port_id
+                for port_id in available_ports
+                if port_id in requested_ports
+            ]
+
+            topology["independent_ports"] = selected_ports
+            model["topology"] = topology
+
+            save_node_model(model)
+
+            route_arguments = {}
+
+            if request.form.get("reconfigure") == "1":
+                route_arguments["reconfigure"] = "1"
+
+            return redirect(
+                url_for(
+                    "topology_page",
+                    **route_arguments,
+                )
+            )
+
+    return render_template(
+        "topology_independent.html",
+        model=model,
+        available_ports=available_ports,
+        nodes=nodes,
+        selected_ports=selected_ports,
+        primary_port_id=primary_port_id,
+        error=error,
+        version_info=get_version_info(),
+    )
+@app.route(
+    "/topology/local-link/<int:link_index>",
+    methods=["GET", "POST"],
+)
+def topology_local_link_edit_page(link_index):
+    """
+    Edit or remove one existing operator-named local link.
+    """
+
+    model = load_node_model()
+
+    if not is_multiport_build(model):
+        return redirect(url_for("review_page"))
+
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    nodes = model.get("nodes", {})
+
+    if not enabled_ports:
+        return redirect(url_for("hardware_ports_page"))
+
+    if not nodes:
+        return redirect(url_for("port_config_page"))
+
+    topology = model.get("topology", {})
+    local_links = topology.get("local_links", [])
+
+    if (
+        not isinstance(local_links, list)
+        or link_index < 0
+        or link_index >= len(local_links)
+        or not isinstance(local_links[link_index], dict)
+    ):
+        return redirect(url_for("topology_page"))
+
+    link = local_links[link_index]
+
+    reflector_link = topology.get(
+        "reflector_link",
+        {},
+    )
+
+    if not isinstance(reflector_link, dict):
+        reflector_link = {}
+
+    reflector_name = str(
+        reflector_link.get("name")
+        or "LinkToReflector"
+    )
+
+    reflector_ports = reflector_link.get("ports", [])
+
+    if not isinstance(reflector_ports, list):
+        reflector_ports = []
+
+    unavailable_ports = {
+        str(port_id)
+        for port_id in reflector_ports
+    }
+
+    for other_index, other_link in enumerate(local_links):
+        if other_index == link_index:
+            continue
+
+        if not isinstance(other_link, dict):
+            continue
+
+        other_ports = other_link.get("ports", [])
+
+        if not isinstance(other_ports, list):
+            continue
+
+        unavailable_ports.update(
+            str(port_id)
+            for port_id in other_ports
+        )
+
+    available_ports = [
+        port_id
+        for port_id in enabled_ports
+        if port_id not in unavailable_ports
+    ]
+
+    saved_link_ports = link.get("ports", [])
+
+    if not isinstance(saved_link_ports, list):
+        saved_link_ports = []
+
+    selected_ports = [
+        port_id
+        for port_id in available_ports
+        if port_id in {
+            str(saved_port_id)
+            for saved_port_id in saved_link_ports
+        }
+    ]
+
+    saved_independent_ports = topology.get(
+        "independent_ports",
+        [],
+    )
+
+    if not isinstance(saved_independent_ports, list):
+        saved_independent_ports = []
+
+    independent_port_ids = {
+        str(port_id)
+        for port_id in saved_independent_ports
+    }
+
+    original_name = str(
+        link.get("name")
+        or ""
+    )
+
+    available_assignments = {}
+
+    for port_id in available_ports:
+        if port_id in selected_ports:
+            available_assignments[port_id] = (
+                original_name or "Current local link"
+            )
+
+        elif port_id in independent_port_ids:
+            available_assignments[port_id] = (
+                "Independent operation"
+            )
+
+        else:
+            available_assignments[port_id] = "Unassigned"
+
+    entered_name = original_name
+    error = None
+
+    if request.method == "POST":
+        action = str(
+            request.form.get("action")
+            or "save"
+        ).strip().lower()
+
+        if action == "delete":
+            local_links.pop(link_index)
+            topology["local_links"] = local_links
+            model["topology"] = topology
+
+            save_node_model(model)
+
+            route_arguments = {}
+
+            if request.form.get("reconfigure") == "1":
+                route_arguments["reconfigure"] = "1"
+
+            return redirect(
+                url_for(
+                    "topology_page",
+                    **route_arguments,
+                )
+            )
+
+        entered_name = str(
+            request.form.get("local_link_name")
+            or ""
+        ).strip()
+
+        requested_ports = [
+            str(port_id)
+            for port_id in request.form.getlist(
+                "local_link_ports"
+            )
+        ]
+
+        selected_ports = [
+            port_id
+            for port_id in available_ports
+            if port_id in requested_ports
+        ]
+
+        invalid_ports = [
+            port_id
+            for port_id in requested_ports
+            if port_id not in available_ports
+        ]
+
+        other_names = {
+            str(other_link.get("name"))
+            for other_index, other_link in enumerate(
+                local_links
+            )
+            if (
+                other_index != link_index
+                and isinstance(other_link, dict)
+                and other_link.get("name")
+            )
+        }
+
+        name_error = validate_local_link_name(
+            entered_name,
+            reflector_name,
+        )
+
+        if action != "save":
+            error = "Invalid local-link action."
+
+        elif name_error:
+            error = name_error
+
+        elif entered_name in other_names:
+            error = (
+                f"Local-link name {entered_name} is already in use."
+            )
+
+        elif invalid_ports:
+            error = (
+                "The local-link selection contains a port that "
+                "is unavailable or assigned to another link."
+            )
+
+        elif len(selected_ports) < 2:
+            error = (
+                "A local link must contain at least two "
+                "available ports."
+            )
+
+        else:
+            link["name"] = entered_name
+            link["ports"] = selected_ports
+            link.setdefault("default_active", True)
+            link.setdefault("timeout", 300)
+
+            local_links[link_index] = link
+            topology["local_links"] = local_links
+
+            topology["independent_ports"] = [
+                port_id
+                for port_id in enabled_ports
+                if (
+                    port_id in independent_port_ids
+                    and port_id not in selected_ports
+                )
+            ]
+
+            model["topology"] = topology
+
+            save_node_model(model)
+
+            route_arguments = {}
+
+            if request.form.get("reconfigure") == "1":
+                route_arguments["reconfigure"] = "1"
+
+            return redirect(
+                url_for(
+                    "topology_page",
+                    **route_arguments,
+                )
+            )
+
+    return render_template(
+        "topology_local_link_edit.html",
+        model=model,
+        link_index=link_index,
+        available_ports=available_ports,
+        nodes=nodes,
+        available_assignments=available_assignments,
+        entered_name=entered_name,
+        selected_ports=selected_ports,
+        error=error,
+        version_info=get_version_info(),
+    )
+@app.route(
+    "/topology/local-link/add",
+    methods=["GET", "POST"],
+)
+def topology_local_link_add_page():
+    """
+    Create an operator-named local link from currently available ports.
+    """
+
+    model = load_node_model()
+
+    if not is_multiport_build(model):
+        return redirect(url_for("review_page"))
+
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    nodes = model.get("nodes", {})
+
+    if not enabled_ports:
+        return redirect(url_for("hardware_ports_page"))
+
+    if not nodes:
+        return redirect(url_for("port_config_page"))
+
+    topology = model.setdefault("topology", {})
+
+    reflector_link = topology.setdefault(
+        "reflector_link",
+        {},
+    )
+
+    reflector_name = str(
+        reflector_link.get("name")
+        or "LinkToReflector"
+    )
+
+    reflector_ports = reflector_link.get("ports", [])
+
+    if not isinstance(reflector_ports, list):
+        reflector_ports = []
+
+    reflector_port_ids = {
+        str(port_id)
+        for port_id in reflector_ports
+    }
+
+    local_links = topology.setdefault(
+        "local_links",
+        [],
+    )
+
+    error = None
+
+    if not isinstance(local_links, list):
+        local_links = []
+        error = (
+            "The saved local-link configuration is invalid and "
+            "must be repaired before another link can be added."
+        )
+
+    locally_assigned_ports = set()
+
+    for link in local_links:
+        if not isinstance(link, dict):
+            continue
+
+        link_ports = link.get("ports", [])
+
+        if not isinstance(link_ports, list):
+            continue
+
+        locally_assigned_ports.update(
+            str(port_id)
+            for port_id in link_ports
+        )
+
+    available_ports = [
+        port_id
+        for port_id in enabled_ports
+        if (
+            port_id not in reflector_port_ids
+            and port_id not in locally_assigned_ports
+        )
+    ]
+
+    independent_ports = topology.get(
+        "independent_ports",
+        [],
+    )
+
+    if not isinstance(independent_ports, list):
+        independent_ports = []
+
+    independent_port_ids = {
+        str(port_id)
+        for port_id in independent_ports
+    }
+
+    available_assignments = {
+        port_id: (
+            "Independent operation"
+            if port_id in independent_port_ids
+            else "Unassigned"
+        )
+        for port_id in available_ports
+    }
+
+    entered_name = ""
+    selected_ports = []
+
+    if request.method == "POST":
+        entered_name = str(
+            request.form.get("local_link_name")
+            or ""
+        ).strip()
+
+        requested_ports = [
+            str(port_id)
+            for port_id in request.form.getlist(
+                "local_link_ports"
+            )
+        ]
+
+        selected_ports = [
+            port_id
+            for port_id in available_ports
+            if port_id in requested_ports
+        ]
+
+        submitted_invalid_ports = [
+            port_id
+            for port_id in requested_ports
+            if port_id not in available_ports
+        ]
+
+        existing_names = {
+            str(link.get("name"))
+            for link in local_links
+            if (
+                isinstance(link, dict)
+                and link.get("name")
+            )
+        }
+
+        name_error = validate_local_link_name(
+            entered_name,
+            reflector_name,
+        )
+
+        if error:
+            pass
+
+        elif name_error:
+            error = name_error
+
+        elif entered_name in existing_names:
+            error = (
+                f"Local-link name {entered_name} is already in use."
+            )
+
+        elif submitted_invalid_ports:
+            error = (
+                "The local-link selection contains a port that "
+                "is unavailable or already assigned to another link."
+            )
+
+        elif len(selected_ports) < 2:
+            error = (
+                "Select at least two available ports for the "
+                "new local link."
+            )
+
+        else:
+            local_links.append({
+                "name": entered_name,
+                "ports": selected_ports,
+                "default_active": True,
+                "timeout": 300,
+            })
+
+            topology["local_links"] = local_links
+
+            topology["independent_ports"] = [
+                port_id
+                for port_id in enabled_ports
+                if (
+                    port_id in independent_port_ids
+                    and port_id not in selected_ports
+                )
+            ]
+
+            model["topology"] = topology
+            save_node_model(model)
+
+            route_arguments = {}
+
+            if request.form.get("reconfigure") == "1":
+                route_arguments["reconfigure"] = "1"
+
+            return redirect(
+                url_for(
+                    "topology_page",
+                    **route_arguments,
+                )
+            )
+
+    return render_template(
+        "topology_local_link.html",
+        model=model,
+        available_ports=available_ports,
+        nodes=nodes,
+        available_assignments=available_assignments,
+        entered_name=entered_name,
+        selected_ports=selected_ports,
+        error=error,
+        version_info=get_version_info(),
+    )
+@app.route(
+    "/topology/reflector",
+    methods=["GET", "POST"],
+)
+def topology_reflector_page():
+    """
+    Select which enabled ports participate in LinkToReflector.
+
+    The primary port is compulsory. Selecting a port for the
+    reflector removes it from local-link and independent assignments.
+    """
+
+    model = load_node_model()
+
+    if not is_multiport_build(model):
+        return redirect(url_for("reflector_page"))
+
+    reflector = model.get("reflector", {})
+
+    if not reflector.get("enabled"):
+        return redirect(url_for("reflector_page"))
+
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    nodes = model.get("nodes", {})
+
+    if not enabled_ports:
+        return redirect(url_for("hardware_ports_page"))
+
+    if not nodes:
+        return redirect(url_for("port_config_page"))
+
+    primary_port_id = str(
+        model.get("installation", {}).get(
+            "primary_port_id"
+        )
+        or ""
+    )
+
+    if not primary_port_id and len(enabled_ports) == 1:
+        primary_port_id = enabled_ports[0]
+
+    if primary_port_id not in enabled_ports:
+        return redirect(
+            url_for("installation_identity_page")
+        )
+
+    topology = model.setdefault("topology", {})
+
+    reflector_link = topology.setdefault(
+        "reflector_link",
+        {},
+    )
+
+    current_reflector_ports = [
+        str(port)
+        for port in reflector_link.get("ports", [])
+        if str(port) in enabled_ports
+    ]
+
+    error = None
+
+    if request.method == "POST":
+        requested_ports = [
+            str(port)
+            for port in request.form.getlist(
+                "reflector_ports"
+            )
+        ]
+
+        invalid_ports = [
+            port_id
+            for port_id in requested_ports
+            if port_id not in enabled_ports
+        ]
+
+        if invalid_ports:
+            error = (
+                "The reflector selection contains a disabled "
+                "or unknown port."
+            )
+
+        elif primary_port_id not in requested_ports:
+            error = (
+                f"Primary port {primary_port_id} must remain "
+                "connected to LinkToReflector."
+            )
+
+        else:
+            selected_ports = [
+                port_id
+                for port_id in enabled_ports
+                if port_id in requested_ports
+            ]
+
+            reflector_link["name"] = "LinkToReflector"
+            reflector_link["ports"] = selected_ports
+            reflector_link.setdefault(
+                "default_active",
+                True,
+            )
+            reflector_link.setdefault(
+                "timeout",
+                300,
+            )
+
+            topology["reflector_link"] = reflector_link
+
+            local_links = topology.get(
+                "local_links",
+                [],
+            )
+
+            if isinstance(local_links, list):
+                for link in local_links:
+                    if not isinstance(link, dict):
+                        continue
+
+                    link_ports = link.get("ports")
+
+                    if not isinstance(link_ports, list):
+                        continue
+
+                    link["ports"] = [
+                        str(port_id)
+                        for port_id in link_ports
+                        if (
+                            str(port_id) in enabled_ports
+                            and str(port_id)
+                            not in selected_ports
+                        )
+                    ]
+
+            independent_ports = topology.get(
+                "independent_ports",
+                [],
+            )
+
+            if isinstance(independent_ports, list):
+                topology["independent_ports"] = [
+                    str(port_id)
+                    for port_id in independent_ports
+                    if (
+                        str(port_id) in enabled_ports
+                        and str(port_id)
+                        not in selected_ports
+                    )
+                ]
+
+            model["topology"] = topology
+            save_node_model(model)
+
+            route_arguments = {}
+
+            if request.form.get("reconfigure") == "1":
+                route_arguments["reconfigure"] = "1"
+
+            return redirect(
+                url_for(
+                    "topology_page",
+                    **route_arguments,
+                )
+            )
+
+    return render_template(
+        "topology_reflector.html",
+        model=model,
+        enabled_ports=enabled_ports,
+        nodes=nodes,
+        primary_port_id=primary_port_id,
+        current_reflector_ports=current_reflector_ports,
+        error=error,
+        version_info=get_version_info(),
+    )
+@app.route("/topology")
+def topology_page():
+    """
+    Display the current installation topology without modifying it.
+    """
+
+    model = load_node_model()
+
+    if not is_multiport_build(model):
+        return redirect(url_for("review_page"))
+
+    enabled_ports = [
+        str(port)
+        for port in model.get("ports", {}).get("enabled", [])
+    ]
+
+    nodes = model.get("nodes", {})
+
+    if not enabled_ports:
+        return redirect(url_for("hardware_ports_page"))
+
+    if not nodes:
+        return redirect(url_for("port_config_page"))
+
+    topology = model.get("topology", {})
+
+    if not isinstance(topology, dict):
+        topology = {}
+
+    reflector = model.get("reflector", {})
+    reflector_enabled = bool(reflector.get("enabled"))
+
+    primary_port_id = str(
+        model.get("installation", {}).get(
+            "primary_port_id"
+        )
+        or ""
+    )
+
+    if not primary_port_id and len(enabled_ports) == 1:
+        primary_port_id = enabled_ports[0]
+
+    logic_names = get_topology_ports(model)
+
+    assignments = {
+        port_id: []
+        for port_id in enabled_ports
+    }
+
+    reflector_link = topology.get(
+        "reflector_link",
+        {},
+    )
+
+    if isinstance(reflector_link, dict):
+        reflector_name = str(
+            reflector_link.get("name")
+            or "LinkToReflector"
+        )
+
+        reflector_ports = reflector_link.get(
+            "ports",
+            [],
+        )
+
+        if isinstance(reflector_ports, list):
+            for port_id in reflector_ports:
+                port_id = str(port_id)
+
+                if port_id in assignments:
+                    assignments[port_id].append(
+                        reflector_name
+                    )
+
+    local_links = topology.get("local_links", [])
+
+    if isinstance(local_links, list):
+        for link in local_links:
+            if not isinstance(link, dict):
+                continue
+
+            link_name = str(
+                link.get("name")
+                or "Unnamed local link"
+            )
+
+            link_ports = link.get("ports", [])
+
+            if not isinstance(link_ports, list):
+                continue
+
+            for port_id in link_ports:
+                port_id = str(port_id)
+
+                if port_id in assignments:
+                    assignments[port_id].append(
+                        link_name
+                    )
+
+    independent_ports = topology.get(
+        "independent_ports",
+        [],
+    )
+
+    if isinstance(independent_ports, list):
+        for port_id in independent_ports:
+            port_id = str(port_id)
+
+            if port_id in assignments:
+                assignments[port_id].append(
+                    "Independent operation"
+                )
+
+    port_rows = []
+
+    for port_id in enabled_ports:
+        node = nodes.get(port_id, {})
+
+        port_rows.append({
+            "port_id": port_id,
+            "callsign": node.get("callsign"),
+            "logic_name": logic_names.get(
+                port_id,
+                f"Port{port_id}Logic",
+            ),
+            "is_primary": port_id == primary_port_id,
+            "assignments": assignments[port_id],
+        })
+
+    return render_template(
+        "topology.html",
+        model=model,
+        topology=topology,
+        reflector_enabled=reflector_enabled,
+        primary_port_id=primary_port_id,
+        primary_callsign=get_primary_callsign(model),
+        port_rows=port_rows,
+        topology_errors=validate_topology_membership(
+            model
+        ),
         version_info=get_version_info(),
     )
 @app.route("/port-final-review", methods=["GET", "POST"])

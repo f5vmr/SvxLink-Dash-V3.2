@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" class="light-theme">
+<head>
+    <meta charset="UTF-8">
+    <title>Add Local Link - SvxLink-Dash-V4.0</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='site.css') }}">
+    <link rel="icon"
+          href="{{ url_for('static', filename='svxlink.ico') }}">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <div class="page-header">
+            <img class="page-icon"
+                 src="{{ url_for('static', filename='svxlink.ico') }}"
+                 alt="SvxLink icon">
+
+            <div class="page-heading">
+                <h1>Add Local Link</h1>
+                <p>
+                    Create a local connection between two or more
+                    available radio ports.
+                </p>
+            </div>
+        </div>
+
+        <div class="note">
+            Enter the actual SvxLink configuration section name for this
+            link. The dashboard will not invent or alter the selected name.
+        </div>
+
+        <div class="note">
+            A local link requires at least two ports. Ports already connected
+            to <strong>LinkToReflector</strong> or another local link are not
+            available here. Independently assigned ports may be moved into
+            this new link.
+        </div>
+
+        <div class="note">
+            The generated link will start active with
+            <strong>DEFAULT_ACTIVE=1</strong>. The participating radio
+            logics will use the established <strong>:9</strong> command
+            prefix, providing <strong>90#</strong> to deactivate and
+            <strong>91#</strong> to activate the link.
+        </div>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for('topology_local_link_add_page') }}" 
+        method="post">
+
+            {% if request.args.get("reconfigure") == "1" %}
+                <input type="hidden"
+                       name="reconfigure"
+                       value="1">
+            {% endif %}
+
+            <div class="field-group">
+                <label class="label" for="local_link_name">
+                    Local link section name
+                </label>
+
+                <input class="input-field"
+                       id="local_link_name"
+                       name="local_link_name"
+                       type="text"
+                       maxlength="64"
+                       value="{{ entered_name }}"
+                       placeholder="VhfUhfLink"
+                       required>
+
+                <div class="note">
+                    Begin with a letter. Use only letters, digits,
+                    underscores or hyphens. The name must not duplicate
+                    another configuration section.
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="label">Participating ports</div>
+
+                {% if available_ports|length >= 2 %}
+                    {% for port_id in available_ports %}
+                        {% set node = nodes.get(port_id, {}) %}
+
+                        <div class="status-box">
+                            <div class="status-box-title">
+                                Port {{ port_id }}
+                            </div>
+
+                            <div class="status-box-row">
+                                Callsign:
+                                <strong>
+                                    {{ node.get(
+                                        "callsign",
+                                        "Not configured"
+                                    ) }}
+                                </strong>
+                            </div>
+
+                            <div class="status-box-row">
+                                Role:
+                                <strong>
+                                    {{ node.get(
+                                        "role",
+                                        "simplex"
+                                    )|title }}
+                                </strong>
+                            </div>
+
+                            <div class="status-box-row">
+                                Current assignment:
+                                <strong>
+                                    {{ available_assignments.get(
+                                        port_id,
+                                        "Unassigned"
+                                    ) }}
+                                </strong>
+                            </div>
+
+                            <div class="status-box-row">
+                                <label class="checkbox-row">
+                                    <input type="checkbox"
+                                           name="local_link_ports"
+                                           value="{{ port_id }}"
+                                           {% if port_id in selected_ports %}
+                                               checked
+                                           {% endif %}>
+                                    Include Port {{ port_id }}
+                                </label>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="error">
+                        At least two ports must be available before a new
+                        local link can be created.
+                    </p>
+                {% endif %}
+            </div>
+
+            <div class="button-row">
+                <a class="button-secondary"
+                   href="{{
+                       url_for(
+                           'topology_page',
+                           reconfigure='1'
+                       )
+                       if request.args.get('reconfigure') == '1'
+                       else url_for('topology_page')
+                   }}">
+                    Cancel
+                </a>
+
+                {% if available_ports|length >= 2 %}
+                    <button class="button-primary"
+                            type="submit">
+                        Create Local Link
+                    </button>
+                {% endif %}
+            </div>
+        </form>
+    </section>
+
+    <footer class="site-footer">
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
+    </footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" class="light-theme">
+<head>
+    <meta charset="UTF-8">
+    <title>Independent Ports - SvxLink-Dash-V4.0</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='site.css') }}">
+    <link rel="icon"
+          href="{{ url_for('static', filename='svxlink.ico') }}">
+</head>
+<body>
+<main class="page">
+    <section class="card">
+        <div class="page-header">
+            <img class="page-icon"
+                 src="{{ url_for('static', filename='svxlink.ico') }}"
+                 alt="SvxLink icon">
+
+            <div class="page-heading">
+                <h1>Independent Ports</h1>
+                <p>
+                    Select the available radio ports that will operate
+                    without a reflector or local-link connection.
+                </p>
+            </div>
+        </div>
+
+        <div class="note">
+            Only ports that are not members of
+            <strong>LinkToReflector</strong> or a local link are shown.
+            Selecting a port records independent operation as a deliberate
+            topology decision.
+        </div>
+
+        <div class="note">
+            Clearing an existing selection leaves that port unassigned.
+            The topology review will then require another assignment before
+            the configuration can be completed.
+        </div>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for('topology_independent_page') }}"
+              method="post">
+
+            {% if request.args.get("reconfigure") == "1" %}
+                <input type="hidden"
+                       name="reconfigure"
+                       value="1">
+            {% endif %}
+
+            <div class="form-section">
+                <div class="label">
+                    Ports assigned to independent operation
+                </div>
+
+                {% if available_ports %}
+                    {% for port_id in available_ports %}
+                        {% set node = nodes.get(port_id, {}) %}
+
+                        <div class="status-box">
+                            <div class="status-box-title">
+                                Port {{ port_id }}
+                                {% if port_id == primary_port_id %}
+                                    — Primary
+                                {% endif %}
+                            </div>
+
+                            <div class="status-box-row">
+                                Callsign:
+                                <strong>
+                                    {{ node.get(
+                                        "callsign",
+                                        "Not configured"
+                                    ) }}
+                                </strong>
+                            </div>
+
+                            <div class="status-box-row">
+                                Role:
+                                <strong>
+                                    {{ node.get(
+                                        "role",
+                                        "simplex"
+                                    )|title }}
+                                </strong>
+                            </div>
+
+                            <div class="status-box-row">
+                                <label class="checkbox-row">
+                                    <input type="checkbox"
+                                           name="independent_ports"
+                                           value="{{ port_id }}"
+                                           {% if port_id in selected_ports %}
+                                               checked
+                                           {% endif %}>
+                                    Operate Port {{ port_id }}
+                                    independently
+                                </label>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="note">
+                        Every enabled port is already assigned to a link.
+                        There are no ports available for independent
+                        operation.
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="button-row">
+                <a class="button-secondary"
+                   href="{{
+                       url_for(
+                           'topology_page',
+                           reconfigure='1'
+                       )
+                       if request.args.get('reconfigure') == '1'
+                       else url_for('topology_page')
+                   }}">
+                    Cancel
+                </a>
+
+                <button class="button-primary"
+                        type="submit">
+                    Save Independent Ports
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <footer class="site-footer">
+        SvxLink Software &copy; Tobias Blömberg SM0SVX<br>
+        SvxLink Configurator and Dashboard &copy; Chris Jackson G4NAB<br>
+        SvxLink-Dash-V4.0 |
+        SvxLink Package {{ version_info.package }} |
+        SvxLink {{ version_info.engine }}
+    </footer>
+</main>
+</body>
+</html>
