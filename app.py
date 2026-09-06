@@ -93,11 +93,13 @@ from services.node_info_validation import (
     validate_node_information,
 )
 from services.topology_ports import (
+    get_topology_memberships,
     get_topology_ports,
 )
 from services.topology_validation import (
+    get_incomplete_topology_ports,
     validate_local_link_name,
-    validate_topology_membership,
+    validate_topology,
 )
 from renderers.svxlink_renderer import (
     get_primary_callsign,
@@ -1056,6 +1058,35 @@ def next_after_reflector(model):
         return url_for("port_final_review_page")
 
     return url_for("review_page")
+
+def redirect_after_port_configuration(
+    default_endpoint,
+):
+    """
+    Return a completed port-configuration form to its caller.
+
+    Topology repair takes priority over ordinary wizard progression.
+    Existing reconfiguration behaviour remains unchanged otherwise.
+    """
+
+    if request.form.get("return_to") == "topology":
+        route_arguments = {}
+
+        if request.form.get("reconfigure") == "1":
+            route_arguments["reconfigure"] = "1"
+
+        return redirect(
+            url_for(
+                "topology_page",
+                **route_arguments,
+            )
+        )
+
+    if request.form.get("reconfigure") == "1":
+        return redirect(url_for("build_page"))
+
+    return redirect(url_for(default_endpoint))
+
 def initialise_port_nodes(model, profile):
     ports = model.get("ports", {})
     enabled_ports = ports.get("enabled", [])
@@ -1326,10 +1357,9 @@ def port_node_page(port_id):
 
             save_node_model(model)
 
-            if request.form.get("reconfigure") == "1":
-                return redirect(url_for("build_page"))
-
-            return redirect(url_for("port_config_page"))
+            return redirect_after_port_configuration(
+                "port_config_page"
+            )
 
     return render_template(
         "port_node.html",
@@ -1527,10 +1557,10 @@ def port_squelch_detail_page(port_id):
 
             save_node_model(model)
 
-            if request.form.get("reconfigure") == "1":
-                return redirect(url_for("build_page"))
+            return redirect_after_port_configuration(
+                "port_squelch_page"
+            )
 
-            return redirect(url_for("port_squelch_page"))
     return render_template(
         "port_squelch_detail.html",
         model=model,
@@ -1751,10 +1781,9 @@ def port_ident_page():
 
             save_node_model(model)
 
-            if request.form.get("reconfigure") == "1":
-                return redirect(url_for("build_page"))
-
-            return redirect(url_for("port_cw_page"))
+            return redirect_after_port_configuration(
+                "port_cw_page"
+            )
 
         except Exception as exc:
             error = f"Announcement file upload failed: {exc}"
@@ -1825,10 +1854,9 @@ def port_cw_page():
 
         save_node_model(model)
 
-        if request.form.get("reconfigure") == "1":
-            return redirect(url_for("build_page"))
-
-        return redirect(url_for("courtesy_page"))
+        return redirect_after_port_configuration(
+            "courtesy_page"
+        )
 
     return render_template(
         "port_cw.html",
@@ -1939,10 +1967,9 @@ def port_repeater_page():
 
         save_node_model(model)
 
-        if request.form.get("reconfigure") == "1":
-            return redirect(url_for("build_page"))
-
-        return redirect(url_for("installation_identity_page"))
+        return redirect_after_port_configuration(
+            "installation_identity_page"
+        )
 
     return render_template(
         "port_repeater.html",
@@ -2880,89 +2907,42 @@ def topology_page():
 
     logic_names = get_topology_ports(model)
 
-    assignments = {
+    assignments = get_topology_memberships(model)
+
+    incomplete_issues = get_incomplete_topology_ports(
+        model
+    )
+
+    issues_by_port = {
         port_id: []
         for port_id in enabled_ports
     }
 
-    reflector_link = topology.get(
-        "reflector_link",
-        {},
-    )
+    for issue in incomplete_issues:
+        port_id = str(issue.get("port_id") or "")
 
-    if isinstance(reflector_link, dict):
-        reflector_name = str(
-            reflector_link.get("name")
-            or "LinkToReflector"
-        )
-
-        reflector_ports = reflector_link.get(
-            "ports",
-            [],
-        )
-
-        if isinstance(reflector_ports, list):
-            for port_id in reflector_ports:
-                port_id = str(port_id)
-
-                if port_id in assignments:
-                    assignments[port_id].append(
-                        reflector_name
-                    )
-
-    local_links = topology.get("local_links", [])
-
-    if isinstance(local_links, list):
-        for link in local_links:
-            if not isinstance(link, dict):
-                continue
-
-            link_name = str(
-                link.get("name")
-                or "Unnamed local link"
-            )
-
-            link_ports = link.get("ports", [])
-
-            if not isinstance(link_ports, list):
-                continue
-
-            for port_id in link_ports:
-                port_id = str(port_id)
-
-                if port_id in assignments:
-                    assignments[port_id].append(
-                        link_name
-                    )
-
-    independent_ports = topology.get(
-        "independent_ports",
-        [],
-    )
-
-    if isinstance(independent_ports, list):
-        for port_id in independent_ports:
-            port_id = str(port_id)
-
-            if port_id in assignments:
-                assignments[port_id].append(
-                    "Independent operation"
-                )
+        if port_id in issues_by_port:
+            issues_by_port[port_id].append(issue)
 
     port_rows = []
 
     for port_id in enabled_ports:
         node = nodes.get(port_id, {})
 
+        port_issues = issues_by_port[port_id]
+
         port_rows.append({
             "port_id": port_id,
             "callsign": node.get("callsign"),
+            "role": node.get("role"),
             "logic_name": logic_names.get(
                 port_id,
                 f"Port{port_id}Logic",
             ),
             "is_primary": port_id == primary_port_id,
             "assignments": assignments[port_id],
+            "configuration_complete": not port_issues,
+            "configuration_issues": port_issues,
         })
 
     return render_template(
@@ -2973,9 +2953,7 @@ def topology_page():
         primary_port_id=primary_port_id,
         primary_callsign=get_primary_callsign(model),
         port_rows=port_rows,
-        topology_errors=validate_topology_membership(
-            model
-        ),
+        topology_errors=validate_topology(model),
         version_info=get_version_info(),
     )
 @app.route("/port-final-review", methods=["GET", "POST"])

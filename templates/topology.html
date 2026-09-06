@@ -137,6 +137,25 @@
                                     {{ link.get("timeout", 300) }} seconds
                                 </strong>
                             </p>
+                                                        <div class="button-row">
+                                <a class="button-secondary"
+                                   href="{{
+                                       url_for(
+                                           'topology_local_link_edit_page',
+                                           link_index=loop.index0,
+                                           reconfigure='1'
+                                       )
+                                       if request.args.get(
+                                           'reconfigure'
+                                       ) == '1'
+                                       else url_for(
+                                           'topology_local_link_edit_page',
+                                           link_index=loop.index0
+                                       )
+                                   }}">
+                                    Edit or Remove
+                                </a>
+                            </div>
                         </div>
                     {% endfor %}
                 </div>
@@ -217,7 +236,20 @@
 
                         <p>
                             Callsign:
-                            <strong>{{ row.callsign or "Not configured" }}</strong>
+                            <strong>
+                                {{ row.callsign or "Not configured" }}
+                            </strong>
+                        </p>
+
+                        <p>
+                            Role:
+                            <strong>
+                                {% if row.role %}
+                                    {{ row.role|title }}
+                                {% else %}
+                                    Not configured
+                                {% endif %}
+                            </strong>
                         </p>
 
                         <p>
@@ -228,11 +260,32 @@
                         <p>
                             Assignment:
                             {% if row.assignments %}
-                                <strong>{{ row.assignments|join(", ") }}</strong>
+                                <strong>
+                                    {{ row.assignments|join(", ") }}
+                                </strong>
                             {% else %}
-                                <span class="warning-text">Unassigned</span>
+                                <span class="warning-text">
+                                    Unassigned
+                                </span>
                             {% endif %}
                         </p>
+
+                        <p>
+                            Port configuration:
+                            {% if row.configuration_complete %}
+                                <strong>Complete</strong>
+                            {% else %}
+                                <span class="warning-text">
+                                    Incomplete
+                                </span>
+                            {% endif %}
+                        </p>
+
+                        {% for issue in row.configuration_issues %}
+                            <p class="error">
+                                {{ issue.message }}
+                            </p>
+                        {% endfor %}
                     </div>
                 {% endfor %}
             </div>

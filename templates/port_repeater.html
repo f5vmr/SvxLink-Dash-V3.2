@@ -32,6 +32,11 @@
             {% if request.args.get("reconfigure") == "1" %}
                 <input type="hidden" name="reconfigure" value="1">
             {% endif %}
+            {% if request.values.get("return_to") == "topology" %}
+                <input type="hidden"
+                       name="return_to"
+                       value="topology">
+            {% endif %}
             <div class="form-section">
                 <div class="label">Repeater port settings</div>
 

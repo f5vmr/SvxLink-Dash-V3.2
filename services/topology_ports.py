@@ -40,3 +40,72 @@ def get_topology_logic_name(model, port_id):
     if not isinstance(port_id, str) or port_id not in ports:
         raise ValueError("Port {!r} is not an enabled topology port.".format(port_id))
     return ports[port_id]
+def get_topology_memberships(model):
+    """
+    Return every saved topology assignment for each enabled port.
+
+    Multiple entries are retained so conflicting assignments remain
+    visible to the topology page and validator.
+    """
+
+    topology_ports = get_topology_ports(model)
+
+    memberships = {
+        port_id: []
+        for port_id in topology_ports
+    }
+
+    topology = model.get("topology", {})
+
+    if not isinstance(topology, dict):
+        return memberships
+
+    def add_members(members, label):
+        if not isinstance(members, list):
+            return
+
+        for member in members:
+            port_id = str(member)
+
+            if port_id in memberships:
+                memberships[port_id].append(label)
+
+    reflector_link = topology.get(
+        "reflector_link",
+        {},
+    )
+
+    if isinstance(reflector_link, dict):
+        reflector_name = str(
+            reflector_link.get("name")
+            or "LinkToReflector"
+        )
+
+        add_members(
+            reflector_link.get("ports"),
+            reflector_name,
+        )
+
+    local_links = topology.get("local_links", [])
+
+    if isinstance(local_links, list):
+        for link in local_links:
+            if not isinstance(link, dict):
+                continue
+
+            link_name = str(
+                link.get("name")
+                or "Unnamed local link"
+            )
+
+            add_members(
+                link.get("ports"),
+                link_name,
+            )
+
+    add_members(
+        topology.get("independent_ports"),
+        "Independent operation",
+    )
+
+    return memberships

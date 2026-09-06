@@ -1,8 +1,11 @@
 import unittest
 from copy import deepcopy
 
-from services.topology_ports import get_topology_ports, get_topology_logic_name
-
+from services.topology_ports import (
+    get_topology_logic_name,
+    get_topology_memberships,
+    get_topology_ports,
+)
 
 class TopologyPortTests(unittest.TestCase):
     def test_ordinary_roles_have_virtual_identity_without_mutation(self):
@@ -49,6 +52,75 @@ class TopologyPortTests(unittest.TestCase):
                 "2": "Port2Logic",
             },
         )
+
+    def test_topology_memberships_include_every_disposition(self):
+        model = {
+            "hardware": {
+                "family": "ics",
+            },
+            "ports": {
+                "enabled": ["1", "2", "3", "4"],
+            },
+            "topology": {
+                "reflector_link": {
+                    "name": "LinkToReflector",
+                    "ports": ["1"],
+                },
+                "local_links": [
+                    {
+                        "name": "VhfUhfLink",
+                        "ports": ["2", "3"],
+                    },
+                ],
+                "independent_ports": ["4"],
+            },
+        }
+
+        self.assertEqual(
+            get_topology_memberships(model),
+            {
+                "1": ["LinkToReflector"],
+                "2": ["VhfUhfLink"],
+                "3": ["VhfUhfLink"],
+                "4": ["Independent operation"],
+            },
+        )
+
+    def test_topology_memberships_preserve_conflicts(self):
+        model = {
+            "hardware": {
+                "family": "ics",
+            },
+            "ports": {
+                "enabled": ["1", "2"],
+            },
+            "topology": {
+                "reflector_link": {
+                    "name": "LinkToReflector",
+                    "ports": ["1", "2"],
+                },
+                "local_links": [
+                    {
+                        "name": "LocalRadioLink",
+                        "ports": ["2"],
+                    },
+                ],
+                "independent_ports": ["2"],
+            },
+        }
+
+        before = deepcopy(model)
+        memberships = get_topology_memberships(model)
+
+        self.assertEqual(
+            memberships["2"],
+            [
+                "LinkToReflector",
+                "LocalRadioLink",
+                "Independent operation",
+            ],
+        )
+        self.assertEqual(model, before)
 
     def test_invalid_or_ambiguous_configurations_are_rejected(self):
         for model in ({}, {"hardware": {"family": "ics"}},
