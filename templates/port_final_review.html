@@ -256,7 +256,10 @@
 
         <form action="{{ url_for('port_final_review_page') }}" method="post">
             <div class="button-row">
-                <a class="button-secondary" href="{{ url_for('port_repeater_page') }}">Back</a>
+                <a class="button-secondary"
+                   href="{{ url_for('topology_page') }}">
+                    Back
+                </a>
 
                 {% if incomplete %}
                     <button class="button-primary" type="submit" disabled>

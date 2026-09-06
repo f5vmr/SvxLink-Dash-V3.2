@@ -18,7 +18,14 @@ from pathlib import Path
 import subprocess
 from unittest import result
 
-from models.node_model import validate_model
+from models.node_model import (
+    is_multiport_model,
+    validate_model,
+)
+from services.topology_validation import (
+    validate_topology,
+)
+
 from services.node_info_service import write_node_info_json
 
 from hw_platforms import (
@@ -97,6 +104,24 @@ def validate_build(model):
     result = build_result()
 
     validation_errors = validate_model(model)
+
+    if is_multiport_model(model):
+        validation_errors.extend(
+            validate_topology(model)
+        )
+
+        topology_configured = bool(
+            model.get("build", {}).get(
+                "topology_configured"
+            )
+        )
+
+        if not topology_configured:
+            validation_errors.append(
+                "Port topology must be reviewed and saved "
+                "before building the configuration."
+            )
+
     platform_errors = validate_platform_model(model)
 
     result["validation_errors"] = validation_errors

@@ -26,6 +26,11 @@
         </div>
 
         <div class="note">
+            Port linking is the final configuration-parameter stage.
+            The enabled ports, their logic roles and the selected reflector
+            route have already been established before connections are
+            created.
+            <br><br>
             Every enabled port must have exactly one assignment:
             the reflector link, one local link, or independent operation.
             A port cannot participate in two links at the same time.
@@ -42,7 +47,10 @@
                             "LinkToReflector"
                         ) }}
                     </div>
-
+                    <div class="status-box-row">
+                        Configured reflector route:
+                        <strong>{{ reflector_route_label }}</strong>
+                    </div>
                     <div class="status-box-row">
                         Primary port:
                         <strong>Port {{ primary_port_id }}</strong>
@@ -87,8 +95,10 @@
             </div>
         {% else %}
             <div class="note">
-                Reflector operation is disabled. No port may be assigned
-                to <strong>LinkToReflector</strong>.
+                Configured reflector route:
+                <strong>{{ reflector_route_label }}</strong>.
+                No port may be assigned to
+                <strong>LinkToReflector</strong>.
             </div>
         {% endif %}
 
@@ -285,6 +295,15 @@
                             <p class="error">
                                 {{ issue.message }}
                             </p>
+
+                            {% if issue.configure_url %}
+                                <div class="button-row">
+                                    <a class="button-secondary"
+                                       href="{{ issue.configure_url }}">
+                                        Configure Port {{ row.port_id }}
+                                    </a>
+                                </div>
+                            {% endif %}
                         {% endfor %}
                     </div>
                 {% endfor %}
@@ -305,17 +324,35 @@
             </div>
         {% endif %}
 
-        <div class="button-row">
-            <a class="button-secondary"
-               href="{{ url_for('reflector_page') }}">
-                Back
-            </a>
+        <form action="{{ url_for('topology_page') }}"
+              method="post">
 
-            <a class="button-primary"
-               href="{{ url_for('port_final_review_page') }}">
-                Continue
-            </a>
-        </div>
+            {% if request.values.get("reconfigure") == "1" %}
+                <input type="hidden"
+                       name="reconfigure"
+                       value="1">
+            {% endif %}
+
+            <div class="button-row">
+                <a class="button-secondary"
+                   href="{{ url_for('reflector_page') }}">
+                    Back
+                </a>
+
+                {% if topology_errors %}
+                    <button class="button-primary"
+                            type="submit"
+                            disabled>
+                        Resolve Topology Issues
+                    </button>
+                {% else %}
+                    <button class="button-primary"
+                            type="submit">
+                        Save and Continue
+                    </button>
+                {% endif %}
+            </div>
+        </form>
     </section>
 
     <footer class="site-footer">

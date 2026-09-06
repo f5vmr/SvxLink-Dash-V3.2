@@ -1055,7 +1055,7 @@ def next_after_timezone(model):
 
 def next_after_reflector(model):
     if is_multiport_build(model):
-        return url_for("port_final_review_page")
+        return url_for("topology_page")
 
     return url_for("review_page")
 
@@ -2863,7 +2863,10 @@ def topology_reflector_page():
         error=error,
         version_info=get_version_info(),
     )
-@app.route("/topology")
+@app.route(
+    "/topology",
+    methods=["GET", "POST"],
+)
 def topology_page():
     """
     Display the current installation topology without modifying it.
@@ -2895,6 +2898,25 @@ def topology_page():
     reflector = model.get("reflector", {})
     reflector_enabled = bool(reflector.get("enabled"))
 
+    reflector_route = str(
+        reflector.get("route")
+        or "none"
+    ).strip().lower()
+
+    reflector_route_labels = {
+        "none": "Disabled",
+        "federation": "Federation",
+        "v2": "Independent Protocol 2",
+        "v3": "Protocol 3 with X.509 certificates",
+    }
+
+    reflector_route_label = (
+        reflector_route_labels.get(
+            reflector_route,
+            "Unknown reflector route",
+        )
+    )
+
     primary_port_id = str(
         model.get("installation", {}).get(
             "primary_port_id"
@@ -2918,8 +2940,29 @@ def topology_page():
         for port_id in enabled_ports
     }
 
-    for issue in incomplete_issues:
+    for saved_issue in incomplete_issues:
+        issue = dict(saved_issue)
         port_id = str(issue.get("port_id") or "")
+
+        endpoint = issue.get("endpoint")
+        endpoint_values = issue.get("values", {})
+
+        if not isinstance(endpoint_values, dict):
+            endpoint_values = {}
+
+        route_arguments = dict(endpoint_values)
+        route_arguments["return_to"] = "topology"
+
+        if request.args.get("reconfigure") == "1":
+            route_arguments["reconfigure"] = "1"
+
+        if endpoint:
+            issue["configure_url"] = url_for(
+                endpoint,
+                **route_arguments,
+            )
+        else:
+            issue["configure_url"] = None
 
         if port_id in issues_by_port:
             issues_by_port[port_id].append(issue)
@@ -2945,15 +2988,31 @@ def topology_page():
             "configuration_issues": port_issues,
         })
 
+    topology_errors = validate_topology(model)
+
+    if request.method == "POST":
+        if not topology_errors:
+            model.setdefault("build", {})
+            model["build"]["topology_configured"] = True
+
+            save_node_model(model)
+
+            if request.form.get("reconfigure") == "1":
+                return redirect(url_for("build_page"))
+
+            return redirect(
+                url_for("port_final_review_page")
+            )
     return render_template(
         "topology.html",
         model=model,
         topology=topology,
         reflector_enabled=reflector_enabled,
+        reflector_route_label=reflector_route_label,
         primary_port_id=primary_port_id,
         primary_callsign=get_primary_callsign(model),
         port_rows=port_rows,
-        topology_errors=validate_topology(model),
+        topology_errors=topology_errors,
         version_info=get_version_info(),
     )
 @app.route("/port-final-review", methods=["GET", "POST"])
@@ -2969,6 +3028,16 @@ def port_final_review_page():
 
     if not nodes:
         return redirect(url_for("port_config_page"))
+
+    topology_errors = validate_topology(model)
+    topology_configured = bool(
+        model.get("build", {}).get(
+            "topology_configured"
+        )
+    )
+
+    if topology_errors or not topology_configured:
+        return redirect(url_for("topology_page"))
 
     enabled_port_ids = [
         str(port)
@@ -5650,6 +5719,15 @@ def reconfigure_page():
                 "description": (
                     "Select the primary port and callsign used to "
                     "identify the complete installation."
+                ),
+            },
+            {
+                "id": "topology",
+                "label": "Port Link Topology",
+                "route": "topology_page",
+                "description": (
+                    "Change reflector membership, local links "
+                    "and independent port assignments."
                 ),
             },
             {
