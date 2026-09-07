@@ -39,12 +39,30 @@ SUPPORTED_DOWN_TONES = {
     "va",
     "none",
 }
-SUPPORTED_SQUELCH_METHODS = [
+
+STANDARD_SQUELCH_METHODS = (
     "hidraw",
     "gpiod",
-    "ctcss",
     "serial",
-]
+    "ctcss",
+)
+
+ADVANCED_SQUELCH_METHODS = (
+    "vox",
+    "siglev",
+    "combine",
+)
+
+MANUAL_SQUELCH_DETECTORS = (
+    "evdev",
+    "pty",
+    "rtl_sdr",
+)
+
+SUPPORTED_SQUELCH_METHODS = (
+    *STANDARD_SQUELCH_METHODS,
+)
+
 SUPPORTED_INTERFACE_MODES = {
     "hidraw",
     "gpiod",
@@ -248,6 +266,9 @@ DEFAULT_MODEL = {
     },
     "squelch": {
         "method": "hidraw",
+        "advanced_example": None,
+        "combine_components": [],
+        "manual_detector": None,
         "ctcss_freq": None,
         "ctcss_tx": False,
     },
@@ -310,6 +331,176 @@ def is_multiport_model(model):
         is_ics_multiport_model(model)
         or len(enabled_ports) > 1
     )
+def squelch_uses_ctcss(squelch):
+    """
+    Return True when CTCSS is the active SQL detector or is
+    selected for a commented Advanced COMBINE example.
+    """
+
+    if not isinstance(squelch, dict):
+        return False
+
+    if squelch.get("method") == "ctcss":
+        return True
+
+    if squelch.get("advanced_example") != "combine":
+        return False
+
+    components = squelch.get(
+        "combine_components",
+        [],
+    )
+
+    return (
+        isinstance(components, list)
+        and "ctcss" in components
+    )
+
+
+def validate_squelch_configuration(
+    squelch,
+    label="Squelch",
+):
+    """
+    Validate one guided squelch configuration.
+
+    The active method must always be a Standard detector.
+    Advanced and specialist selections only describe commented
+    manual configuration examples.
+    """
+
+    errors = []
+
+    if not isinstance(squelch, dict):
+        return [
+            f"{label} configuration must be an object."
+        ]
+
+    method = squelch.get("method")
+
+    if method not in SUPPORTED_SQUELCH_METHODS:
+        errors.append(
+            f"{label} active detector must be HIDRAW, GPIOD, "
+            "SERIAL or CTCSS."
+        )
+
+    advanced_example = squelch.get(
+        "advanced_example"
+    )
+
+    if (
+        advanced_example is not None
+        and advanced_example
+        not in ADVANCED_SQUELCH_METHODS
+    ):
+        errors.append(
+            f"{label} Advanced example must be VOX, SIGLEV "
+            "or COMBINE."
+        )
+
+    manual_detector = squelch.get(
+        "manual_detector"
+    )
+
+    if (
+        manual_detector is not None
+        and manual_detector
+        not in MANUAL_SQUELCH_DETECTORS
+    ):
+        errors.append(
+            f"{label} specialist example must be EVDEV, PTY "
+            "or RTL-SDR."
+        )
+
+    if advanced_example and manual_detector:
+        errors.append(
+            f"{label} cannot select both an Advanced and a "
+            "Super-advanced example."
+        )
+
+    components = squelch.get(
+        "combine_components",
+        [],
+    )
+
+    if advanced_example == "combine":
+        if not isinstance(components, list):
+            errors.append(
+                f"{label} COMBINE components must be a list."
+            )
+        else:
+            allowed_components = {
+                "vox",
+                "siglev",
+                "ctcss",
+            }
+
+            invalid_components = [
+                component
+                for component in components
+                if component not in allowed_components
+            ]
+
+            if invalid_components:
+                errors.append(
+                    f"{label} COMBINE contains an unsupported "
+                    "detector component."
+                )
+
+            if len(components) < 2:
+                errors.append(
+                    f"{label} COMBINE requires at least two "
+                    "detector components."
+                )
+
+            if len(components) > 3:
+                errors.append(
+                    f"{label} COMBINE permits no more than "
+                    "three detector components."
+                )
+
+            if len(set(components)) != len(
+                components
+            ):
+                errors.append(
+                    f"{label} COMBINE cannot contain the same "
+                    "detector component more than once."
+                )
+
+    elif components:
+        errors.append(
+            f"{label} cannot retain COMBINE components when "
+            "the Advanced example is not COMBINE."
+        )
+
+    if squelch_uses_ctcss(squelch):
+        ctcss_freq = str(
+            squelch.get("ctcss_freq") or ""
+        ).strip()
+
+        if not ctcss_freq:
+            errors.append(
+                f"{label} CTCSS frequency is required when "
+                "CTCSS participates in SQL detection."
+            )
+
+        transmit_ctcss = bool(
+            squelch.get("ctcss_tx")
+        ) or (
+            str(
+                squelch.get("ctcss_mode") or ""
+            ).strip().lower() == "rx_tx"
+        )
+
+        if transmit_ctcss:
+            errors.append(
+                f"{label} cannot use TX CTCSS when CTCSS "
+                "participates in SQL detection."
+            )
+
+    return errors
+
+
 def validate_model(model):
     """
     Validate high-level model consistency.
@@ -408,10 +599,11 @@ def validate_model(model):
         if interface_mode not in SUPPORTED_INTERFACE_MODES:
             errors.append("Interface mode is invalid.")
 
-        squelch_method = model.get("squelch", {}).get("method")
-
-        if squelch_method not in SUPPORTED_SQUELCH_METHODS:
-            errors.append("Squelch method is invalid.")
+        errors.extend(
+            validate_squelch_configuration(
+                model.get("squelch", {}),
+            )
+        )
 
     reflector = model.get("reflector", {})
 

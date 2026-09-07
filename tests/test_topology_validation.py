@@ -139,8 +139,21 @@ class TopologyCompletionTests(unittest.TestCase):
         self.model = new_node_model()
         self.model["ports"] = {"enabled": ["1"]}
         self.model["topology"]["independent_ports"] = ["1"]
-        self.node = {"role": "simplex", "callsign": "TEST"}
-        self.node.update({flag: True for flag, _, _, _ in PORT_CONFIGURATION_STEPS})
+        self.node = {
+            "role": "simplex",
+            "callsign": "TEST",
+            "squelch": {
+                "method": "gpiod",
+                "combine_components": [],
+                "manual_detector": None,
+                "ctcss_freq": None,
+                "ctcss_tx": False,
+            },
+        }
+        self.node.update({
+            flag: True
+            for flag, _, _, _ in PORT_CONFIGURATION_STEPS
+        })
         self.model["nodes"] = {"1": self.node}
 
     def test_complete_port_and_no_mutation(self):
@@ -156,6 +169,37 @@ class TopologyCompletionTests(unittest.TestCase):
         self.assertEqual(issues[0]["values"], {"port_id": "1"})
         self.assertIn("Port 1: complete squelch", validate_topology(self.model)[0])
 
+    def test_invalid_completed_squelch_has_direct_destination(self):
+        self.node["squelch"] = {
+            "method": "gpiod",
+            "advanced_example": "combine",
+            "combine_components": ["vox"],
+            "manual_detector": None,
+            "ctcss_freq": None,
+            "ctcss_tx": False,
+        }
+
+        issues = get_incomplete_topology_ports(
+            self.model
+        )
+
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(
+            issues[0]["missing"],
+            "squelch_configuration",
+        )
+        self.assertEqual(
+            issues[0]["endpoint"],
+            "port_squelch_detail_page",
+        )
+        self.assertEqual(
+            issues[0]["values"],
+            {"port_id": "1"},
+        )
+        self.assertIn(
+            "COMBINE requires at least two",
+            issues[0]["message"],
+        )
     def test_shared_page_destination_has_no_port_parameter(self):
         self.node["ident_configured"] = False
         issue = get_incomplete_topology_ports(self.model)[0]

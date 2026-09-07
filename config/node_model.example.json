@@ -150,6 +150,9 @@
     },
     "squelch": {
         "method": "hidraw",
+        "advanced_example": null,
+        "combine_components": [],
+        "manual_detector": null,
         "ctcss_freq": null,
         "ctcss_tx": false
     },

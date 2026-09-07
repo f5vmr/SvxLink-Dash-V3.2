@@ -5,7 +5,10 @@ Generated section names and workflow integration remain to be completed.
 
 import re
 
-from models.node_model import validate_model
+from models.node_model import (
+    validate_model,
+    validate_squelch_configuration,
+)
 from services.topology_ports import get_topology_ports
 
 
@@ -73,8 +76,42 @@ def get_incomplete_topology_ports(model):
             complete = bool(node.get(flag))
             if flag == "node_details_configured":
                 callsign = node.get("callsign")
-                complete = (complete and node.get("role") in ("simplex", "repeater")
-                            and isinstance(callsign, str) and bool(callsign.strip()))
+                complete = (
+                    complete
+                    and node.get("role") in (
+                        "simplex",
+                        "repeater",
+                    )
+                    and isinstance(callsign, str)
+                    and bool(callsign.strip())
+                )
+
+            elif (
+                flag == "squelch_configured"
+                and complete
+            ):
+                squelch_errors = (
+                    validate_squelch_configuration(
+                        node.get("squelch", {}),
+                        f"Port {port_id} squelch",
+                    )
+                )
+
+                for message in squelch_errors:
+                    incomplete.append({
+                        "port_id": port_id,
+                        "missing": "squelch_configuration",
+                        "message": message,
+                        "endpoint": (
+                            "port_squelch_detail_page"
+                        ),
+                        "values": {
+                            "port_id": port_id,
+                        },
+                    })
+
+                continue
+
             if not complete:
                 incomplete.append({
                     "port_id": port_id,
