@@ -356,6 +356,14 @@ def squelch_uses_ctcss(squelch):
         and "ctcss" in components
     )
 
+def ctcss_talkgroup_selection_available(
+    squelch,
+):
+    """
+    Return whether CTCSS_TO_TG may be offered for this receiver.
+    """
+
+    return not squelch_uses_ctcss(squelch)
 
 def validate_squelch_configuration(
     squelch,

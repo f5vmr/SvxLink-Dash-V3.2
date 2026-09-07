@@ -44,6 +44,9 @@ from services.model_store import (
     save_node_model,
     CTCSS_TONES,
 )
+from services.squelch_configuration import (
+    parse_squelch_form,
+)
 from services.build_svxlink import build_svxlink_configuration
 
 from services.model_store import (
@@ -1467,98 +1470,121 @@ def port_squelch_complete_page():
 @app.route("/port-squelch/<port_id>", methods=["GET", "POST"])
 def port_squelch_detail_page(port_id):
     model = load_node_model()
-
     hardware = model.get("hardware", {})
     nodes = model.get("nodes", {})
     node = nodes.get(port_id)
 
     if not is_multiport_build(model):
-        return redirect(url_for("squelch_page"))
+        return redirect(
+            url_for("squelch_page")
+        )
 
     if not node:
-        return redirect(url_for("port_squelch_page"))
+        return redirect(
+            url_for("port_squelch_page")
+        )
 
     enabled_ports = [
         str(port)
-        for port in model.get("ports", {}).get("enabled", [])
+        for port in model.get(
+            "ports",
+            {},
+        ).get(
+            "enabled",
+            [],
+        )
     ]
 
     if port_id not in enabled_ports:
-        return redirect(url_for("port_squelch_page"))
+        return redirect(
+            url_for("port_squelch_page")
+        )
 
     error = None
 
-    if request.method == "POST":
-        method = request.form.get("squelch_method", "gpiod").strip()
-        ctcss_mode = request.form.get("ctcss_mode", "rx").strip()
-        ctcss_freq = request.form.get("ctcss_freq", "").strip()
+    if hardware.get("family") == "ics":
+        allowed_methods = {
+            "gpiod",
+            "ctcss",
+        }
+    else:
+        allowed_methods = {
+            "hidraw",
+            "gpiod",
+            "serial",
+            "ctcss",
+        }
 
+    if request.method == "POST":
         valid_ctcss_values = {
             value
             for value, _label in CTCSS_FREQUENCIES
         }
 
-        if hardware.get("family") == "ics":
-            valid_squelch_methods = {"gpiod", "ctcss"}
-        else:
-            valid_squelch_methods = {"hidraw", "gpiod", "ctcss", "serial"}
-        if method not in valid_squelch_methods:
-            error = "Please select a valid squelch source."
-            
-        elif method == "ctcss" and ctcss_mode not in ("rx", "rx_tx"):
-            error = "Please select a valid CTCSS behaviour."
+        squelch, squelch_errors = (
+            parse_squelch_form(
+                request.form,
+                allowed_methods,
+                valid_ctcss_values,
+                f"Port {port_id} squelch",
+            )
+        )
 
-        elif ctcss_freq and ctcss_freq not in valid_ctcss_values:
-            error = "Please select a valid CTCSS frequency."
-
-        elif method == "ctcss" and not ctcss_freq:
-            error = "Please select a CTCSS frequency when SvxLink CTCSS squelch is selected."
+        if squelch_errors:
+            error = " ".join(squelch_errors)
 
         else:
-            if method != "ctcss":
-                ctcss_mode = "none"
-                ctcss_freq = ""
-
             node.setdefault("gpio", {})
             node.setdefault("hidraw", {})
             node.setdefault("serial", {})
 
             node["gpio"]["cos_invert"] = (
-                request.form.get("sql_gpio_invert") == "yes"
+                request.form.get(
+                    "sql_gpio_invert"
+                ) == "yes"
             )
 
             node["gpio"]["ptt_invert"] = (
-                request.form.get("ptt_gpio_invert") == "yes"
+                request.form.get(
+                    "ptt_gpio_invert"
+                ) == "yes"
             )
 
             node["hidraw"]["sql_invert"] = (
-                request.form.get("hidraw_sql_invert") == "yes"
+                request.form.get(
+                    "hidraw_sql_invert"
+                ) == "yes"
+            )
+
+            node["hidraw"]["ptt_invert"] = (
+                request.form.get(
+                    "hidraw_ptt_invert"
+                ) == "yes"
             )
 
             node["serial"]["sql_invert"] = (
-                request.form.get("serial_sql_invert") == "yes"
-            )
-            node["hidraw"]["ptt_invert"] = (
-                request.form.get("hidraw_ptt_invert") == "yes"
+                request.form.get(
+                    "serial_sql_invert"
+                ) == "yes"
             )
 
-            node["squelch"] = {
-                "method": method,
-                "ctcss_mode": ctcss_mode,
-                "ctcss_freq": ctcss_freq or None,
-            }
+            node["squelch"] = squelch
             node["squelch_configured"] = True
 
             nodes[port_id] = node
             model["nodes"] = nodes
 
             model.setdefault("build", {})
-            model["build"]["active_port"] = port_id
+            model["build"]["active_port"] = (
+                port_id
+            )
 
             save_node_model(model)
 
-            return redirect_after_port_configuration(
-                "port_squelch_page"
+            return (
+                redirect_after_port_configuration(
+                    "port_squelch_page"
+                )
             )
 
     return render_template(
@@ -3394,87 +3420,108 @@ def squelch_page():
     model = load_node_model()
     error = None
 
-    if "squelch" not in model:
-        model["squelch"] = {}
-        
-    if request.method == "POST":
-        squelch_method = request.form.get("squelch_method")
-        valid_squelch_methods = {"hidraw", "gpiod", "ctcss", "serial"}
-        
-        if squelch_method not in valid_squelch_methods:
-            error = "Please select a valid squelch method."
-        else:
-            model["squelch"]["method"] = squelch_method
+    model.setdefault("squelch", {})
 
-            ctcss_freq = request.form.get("ctcss_freq", "").strip()
-        
-            valid_ctcss_values = {
-                value
-                for value, _label in CTCSS_FREQUENCIES
-            }
-        
-            if ctcss_freq in valid_ctcss_values and ctcss_freq:
-                model["squelch"]["ctcss_freq"] = ctcss_freq
-            else:
-                model["squelch"]["ctcss_freq"] = None
-        
-            model["squelch"]["ctcss_tx"] = (
-                request.form.get("ctcss_tx", "no") == "yes"
-            )
-            if squelch_method != "ctcss":
-                model["squelch"]["ctcss_freq"] = None
-                model["squelch"]["ctcss_tx"] = False
-            else:    
-                if not model["squelch"]["ctcss_freq"]:
-                    error = "Please select a valid CTCSS frequency for CTCSS squelch."
-            if "serial" not in model:
-                model["serial"] = {}
-
-        model["serial"]["sql_port"] = request.form.get(
-            "serial_sql_port",
-            "/dev/ttyS0"
-        ).strip()
-
-        model["serial"]["sql_pin"] = request.form.get(
-            "serial_sql_pin",
-            "CTS"
-        ).strip().upper()
-
-        model["serial"]["sql_set_pins"] = request.form.get(
-            "serial_sql_set_pins",
-            "DTR!RTS"
-        ).strip().upper()
-        if "hidraw" not in model:
-            model["hidraw"] = {}
-
-        if "gpio" not in model:
-            model["gpio"] = {}
-
-        if "sql" not in model["gpio"]:
-            model["gpio"]["sql"] = {}
-
-        model["hidraw"]["sql_invert"] = (
-            request.form.get("hidraw_sql_invert") == "yes"
-        )
-        model["hidraw"]["ptt_invert"] = (
-            request.form.get("hidraw_ptt_invert") == "yes"
-        )
-        model["gpio"]["sql"]["invert"] = (
-            request.form.get("sql_gpio_invert") == "yes"
-        )
-        save_node_model(model)
-
-        if request.form.get("reconfigure") == "1":
-            return redirect(url_for("build_page"))
-
-        return redirect(url_for("ident_page"))
-
-    platform_id = model.get("platform", {}).get("id", "unknown")
+    platform_id = model.get(
+        "platform",
+        {},
+    ).get(
+        "id",
+        "unknown",
+    )
 
     supports_gpiod = platform_id in (
-            "raspberry_pi",
-            "nanopi_neo",
+        "raspberry_pi",
+        "nanopi_neo",
+    )
+
+    allowed_methods = {
+        "hidraw",
+        "serial",
+        "ctcss",
+    }
+
+    if supports_gpiod:
+        allowed_methods.add("gpiod")
+
+    if request.method == "POST":
+        valid_ctcss_values = {
+            value
+            for value, _label in CTCSS_FREQUENCIES
+        }
+
+        squelch, squelch_errors = (
+            parse_squelch_form(
+                request.form,
+                allowed_methods,
+                valid_ctcss_values,
+            )
         )
+
+        if squelch_errors:
+            error = " ".join(squelch_errors)
+
+        else:
+            model["squelch"] = squelch
+
+            model.setdefault("serial", {})
+            model.setdefault("hidraw", {})
+            model.setdefault("gpio", {})
+            model["gpio"].setdefault("sql", {})
+
+            model["serial"]["sql_port"] = str(
+                request.form.get(
+                    "serial_sql_port",
+                )
+                or "/dev/ttyS0"
+            ).strip()
+
+            model["serial"]["sql_pin"] = str(
+                request.form.get(
+                    "serial_sql_pin",
+                )
+                or "CTS"
+            ).strip().upper()
+
+            model["serial"]["sql_set_pins"] = str(
+                request.form.get(
+                    "serial_sql_set_pins",
+                )
+                or "DTR!RTS"
+            ).strip().upper()
+
+            model["hidraw"]["sql_invert"] = (
+                request.form.get(
+                    "hidraw_sql_invert"
+                ) == "yes"
+            )
+
+            model["hidraw"]["ptt_invert"] = (
+                request.form.get(
+                    "hidraw_ptt_invert"
+                ) == "yes"
+            )
+
+            model["gpio"]["sql"]["invert"] = (
+                request.form.get(
+                    "sql_gpio_invert"
+                ) == "yes"
+            )
+
+            save_node_model(model)
+
+            if (
+                request.form.get("reconfigure")
+                == "1"
+            ):
+                return redirect(
+                    url_for("build_page")
+                )
+
+            return redirect(
+                url_for("ident_page")
+            )
+
     return render_template(
         "squelch.html",
         model=model,
@@ -3482,7 +3529,7 @@ def squelch_page():
         error=error,
         ctcss_frequencies=CTCSS_FREQUENCIES,
         version_info=get_version_info(),
-        )
+    )
 @app.route("/ident", methods=["GET", "POST"])
 def ident_page():
     model = load_node_model()

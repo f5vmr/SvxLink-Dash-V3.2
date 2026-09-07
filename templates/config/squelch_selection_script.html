@@ -1,0 +1,130 @@
+<script>
+(function () {
+    function initialiseSquelchSelections() {
+        const advanced = document.getElementById(
+            "{{ squelch_field_prefix }}_advanced_example"
+        );
+
+        const specialist = document.getElementById(
+            "{{ squelch_field_prefix }}_manual_detector"
+        );
+
+        const combineSection = document.getElementById(
+            "{{ squelch_field_prefix }}_combine_components"
+        );
+
+        const ctcssSection = document.getElementById(
+            "{{ ctcss_section_id }}"
+        );
+
+        const standardMethods = document.querySelectorAll(
+            'input[name="squelch_method"]'
+        );
+
+        if (
+            !advanced
+            || !specialist
+            || !combineSection
+            || !ctcssSection
+        ) {
+            return;
+        }
+
+        const combineControls = combineSection.querySelectorAll(
+            'input[name="combine_components"]'
+        );
+
+        function selectedStandardMethod() {
+            return document.querySelector(
+                'input[name="squelch_method"]:checked'
+            );
+        }
+
+        function combineUsesCtcss() {
+            const ctcssComponent = combineSection.querySelector(
+                'input[name="combine_components"][value="ctcss"]'
+            );
+
+            return (
+                advanced.value === "combine"
+                && ctcssComponent
+                && ctcssComponent.checked
+            );
+        }
+
+        function updateDisplay() {
+            const combineSelected = (
+                advanced.value === "combine"
+            );
+
+            combineSection.classList.toggle(
+                "muted-section",
+                !combineSelected
+            );
+
+            combineControls.forEach(function (control) {
+                control.disabled = !combineSelected;
+            });
+
+            const standard = selectedStandardMethod();
+
+            const ctcssRequired = (
+                standard
+                && standard.value === "ctcss"
+            ) || combineUsesCtcss();
+
+            ctcssSection.classList.toggle(
+                "muted-section",
+                !ctcssRequired
+            );
+
+            ctcssSection.querySelectorAll(
+                "select, input"
+            ).forEach(function (control) {
+                control.disabled = !ctcssRequired;
+            });
+        }
+
+        advanced.addEventListener("change", function () {
+            if (advanced.value) {
+                specialist.value = "";
+            }
+
+            updateDisplay();
+        });
+
+        specialist.addEventListener("change", function () {
+            if (specialist.value) {
+                advanced.value = "";
+            }
+
+            updateDisplay();
+        });
+
+        combineControls.forEach(function (control) {
+            control.addEventListener(
+                "change",
+                updateDisplay
+            );
+        });
+
+        standardMethods.forEach(function (control) {
+            control.addEventListener(
+                "change",
+                updateDisplay
+            );
+        });
+
+        updateDisplay();
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener(
+            "DOMContentLoaded",
+            initialiseSquelchSelections
+        );
+    } else {
+        initialiseSquelchSelections();
+    }
+})();
+</script>

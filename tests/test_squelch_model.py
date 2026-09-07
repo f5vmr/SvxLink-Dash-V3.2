@@ -11,6 +11,7 @@ from models.node_model import (
     squelch_uses_ctcss,
     validate_model,
     validate_squelch_configuration,
+    ctcss_talkgroup_selection_available,
 )
 
 
@@ -301,6 +302,51 @@ class SquelchValidationTests(unittest.TestCase):
             "Squelch COMBINE requires at least two "
             "detector components.",
             errors,
+        )
+
+    def test_ctcss_talkgroup_selection_eligibility(self):
+        squelch = self.valid_squelch()
+
+        self.assertTrue(
+            ctcss_talkgroup_selection_available(
+                squelch
+            )
+        )
+
+        squelch.update({
+            "method": "ctcss",
+            "ctcss_freq": "88.5",
+        })
+
+        self.assertFalse(
+            ctcss_talkgroup_selection_available(
+                squelch
+            )
+        )
+
+        squelch = self.valid_squelch()
+        squelch.update({
+            "advanced_example": "combine",
+            "combine_components": [
+                "ctcss",
+                "siglev",
+            ],
+            "ctcss_freq": "88.5",
+        })
+
+        self.assertFalse(
+            ctcss_talkgroup_selection_available(
+                squelch
+            )
+        )
+
+        squelch = self.valid_squelch()
+        squelch["advanced_example"] = "vox"
+
+        self.assertTrue(
+            ctcss_talkgroup_selection_available(
+                squelch
+            )
         )
 
 

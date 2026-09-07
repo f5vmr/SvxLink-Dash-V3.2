@@ -12,6 +12,7 @@ from hw_platforms import get_platform_profile
 from services.svxlink_config_discovery import discover_macros
 
 
+
 APP_ROOT = Path("/opt/dashboard")
 CONFIG_DIR = APP_ROOT / "config"
 MODEL_FILE = CONFIG_DIR / "node_model.json"

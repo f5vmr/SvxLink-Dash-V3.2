@@ -227,38 +227,22 @@
                 </label>
             </div>
 
+            {% set squelch_field_prefix = "port_squelch" %}
+            {% include "config/squelch_advanced_controls.html" %}
+
             <div id="port_ctcss_controls_section" class="form-section">
                 <div class="label">CTCSS settings</div>
             
                 <div class="note">
-                    These settings are used only when the squelch source is
-                    SvxLink CTCSS-controlled squelch.
+                    A CTCSS frequency is required when Standard CTCSS is active
+                    or when CTCSS is included in an Advanced COMBINE example.
+                    Using CTCSS for SQL prevents CTCSS-to-talkgroup selection.
                 </div>
-            
-                <div class="field-group">
-                    <label class="label" for="ctcss_mode">
-                        CTCSS behaviour
-                    </label>
-                
-                    <select class="input-field"
-                            id="ctcss_mode"
-                            name="ctcss_mode">
-                        <option value="rx"
-                            {% if squelch.get("ctcss_mode", "rx") in ("rx", "none", "radio") %}selected{% endif %}>
-                            SvxLink RX decode CTCSS
-                        </option>
-                        <option value="rx_tx"
-                            {% if squelch.get("ctcss_mode") == "rx_tx" %}selected{% endif %}>
-                            SvxLink RX decode and TX encode CTCSS
-                        </option>
-                    </select>
-                </div>
-            
+
                 {% set ctcss_freq_id = "ctcss_freq" %}
                 {% set ctcss_freq_name = "ctcss_freq" %}
                 {% set ctcss_freq_value = squelch.get("ctcss_freq") %}
                 {% set show_ctcss_tx = false %}
-            
                 {% include "config/ctcss_controls.html" %}
             </div>
 
@@ -277,5 +261,8 @@
         SvxLink {{ version_info.engine }}
     </footer>
 </main>
+{% set squelch_field_prefix = "port_squelch" %}
+{% set ctcss_section_id = "port_ctcss_controls_section" %}
+{% include "config/squelch_selection_script.html" %}
 </body>
 </html>

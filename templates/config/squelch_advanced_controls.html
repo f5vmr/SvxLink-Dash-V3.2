@@ -1,0 +1,135 @@
+<div class="form-section">
+    <div class="label">Advanced SQL example</div>
+
+    <div class="note">
+        Advanced detectors are not configured or activated automatically.
+        Select an example only if you intend to complete and activate it
+        manually in svxlink.conf.
+    </div>
+
+    <div class="field-group">
+        <label class="label"
+               for="{{ squelch_field_prefix }}_advanced_example">
+            Commented advanced configuration
+        </label>
+
+        <select class="input-field"
+                id="{{ squelch_field_prefix }}_advanced_example"
+                name="advanced_example">
+            <option value=""
+                {% if not squelch.get("advanced_example") %}selected{% endif %}>
+                None
+            </option>
+
+            <option value="vox"
+                {% if squelch.get("advanced_example") == "vox" %}selected{% endif %}>
+                VOX
+            </option>
+
+            <option value="siglev"
+                {% if squelch.get("advanced_example") == "siglev" %}selected{% endif %}>
+                SIGLEV
+            </option>
+
+            <option value="combine"
+                {% if squelch.get("advanced_example") == "combine" %}selected{% endif %}>
+                COMBINE
+            </option>
+        </select>
+    </div>
+
+    <div id="{{ squelch_field_prefix }}_combine_components"
+         class="field-group">
+        <div class="label">COMBINE components</div>
+
+        <div class="note">
+            Select two or three components. The generated example will
+            combine them using AND logic.
+        </div>
+
+        {% set combine_components = squelch.get(
+            "combine_components",
+            []
+        ) %}
+
+        <label>
+            <input type="checkbox"
+                   name="combine_components"
+                   value="vox"
+                   {% if "vox" in combine_components %}checked{% endif %}>
+            VOX
+        </label>
+
+        <label>
+            <input type="checkbox"
+                   name="combine_components"
+                   value="siglev"
+                   {% if "siglev" in combine_components %}checked{% endif %}>
+            SIGLEV using NOISE detection
+        </label>
+
+        <label>
+            <input type="checkbox"
+                   name="combine_components"
+                   value="ctcss"
+                   {% if "ctcss" in combine_components %}checked{% endif %}>
+            CTCSS
+        </label>
+    </div>
+</div>
+
+<div class="form-section">
+    <div class="label">Super-advanced SQL example</div>
+
+    <div class="note">
+        These are specialist receiver configurations. The dashboard records
+        the selection and provides a commented example only. Device mapping,
+        supporting software and operational testing remain the operator's
+        responsibility.
+    </div>
+
+    <div class="field-group">
+        <label class="label"
+               for="{{ squelch_field_prefix }}_manual_detector">
+            Commented specialist configuration
+        </label>
+
+        <select class="input-field"
+                id="{{ squelch_field_prefix }}_manual_detector"
+                name="manual_detector">
+            <option value=""
+                {% if not squelch.get("manual_detector") %}selected{% endif %}>
+                None
+            </option>
+
+            <option value="evdev"
+                {% if squelch.get("manual_detector") == "evdev" %}selected{% endif %}>
+                EVDEV
+            </option>
+
+            <option value="pty"
+                {% if squelch.get("manual_detector") == "pty" %}selected{% endif %}>
+                PTY
+            </option>
+
+            <option value="rtl_sdr"
+                {% if squelch.get("manual_detector") == "rtl_sdr" %}selected{% endif %}>
+                RTL-SDR
+            </option>
+        </select>
+    </div>
+    <div class="note">
+        RemoteTrx, NetRx, NetTx, MultiRx and MultiTx are not configured
+        by this guided page. They remain specialist manual configurations
+        requiring their own supporting services, receiver or transmitter
+        definitions and operational testing.
+    </div>
+    <div class="note">
+        <strong>Manual configuration warning:</strong>
+        the generated svxlink.conf remains incomplete for the selected
+        Advanced detection methods until their required settings are
+        configured and uncommented manually. Save a separate copy of the
+        completed svxlink.conf because rebuilding from the dashboard may
+        overwrite manual changes.
+    </div>
+</div>

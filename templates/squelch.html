@@ -77,6 +77,10 @@
             </div>            
 
         </div>
+        {% set squelch = model.get("squelch", {}) %}
+        {% set squelch_field_prefix = "single_squelch" %}
+
+        {% include "config/squelch_advanced_controls.html" %}
         <div class="field-group">
             <label class="label">HIDRAW SQL sense</label>
             <div note>
@@ -139,18 +143,15 @@
             </div>
 
             <div class="note">
-                These settings are used only when the squelch source is
-                SvxLink CTCSS-controlled squelch.
+                A CTCSS frequency is required when Standard CTCSS is active
+                or when CTCSS is included in an Advanced COMBINE example.
+                Using CTCSS for SQL prevents CTCSS-to-talkgroup selection.
             </div>
 
             {% set ctcss_freq_id = "ctcss_freq" %}
             {% set ctcss_freq_name = "ctcss_freq" %}
-            {% set ctcss_freq_value = model.squelch.ctcss_freq %}
-            {% set show_ctcss_tx = true %}
-            {% set ctcss_tx_id = "ctcss_tx" %}
-            {% set ctcss_tx_name = "ctcss_tx" %}
-            {% set ctcss_tx_value = model.squelch.ctcss_tx %}
-
+            {% set ctcss_freq_value = squelch.get("ctcss_freq") %}
+            {% set show_ctcss_tx = false %}
             {% include "config/ctcss_controls.html" %}
         </div>
 
@@ -227,32 +228,8 @@
     </footer>
 
 </main>
-<script>
-(function () {
-    function updateCtcssControls() {
-        const selected = document.querySelector('input[name="squelch_method"]:checked');
-        const ctcssEnabled = selected && selected.value === "ctcss";
-
-        const section = document.getElementById("ctcss_controls_section");
-        if (!section) {
-            return;
-        }
-
-        const controls = section.querySelectorAll("select, input");
-
-        controls.forEach(function (control) {
-            control.disabled = !ctcssEnabled;
-        });
-
-        section.classList.toggle("muted-section", !ctcssEnabled);
-    }
-
-    document.querySelectorAll('input[name="squelch_method"]').forEach(function (radio) {
-        radio.addEventListener("change", updateCtcssControls);
-    });
-
-    updateCtcssControls();
-})();
-</script>
+{% set squelch_field_prefix = "single_squelch" %}
+{% set ctcss_section_id = "ctcss_controls_section" %}
+{% include "config/squelch_selection_script.html" %}
 </body>
 </html>
