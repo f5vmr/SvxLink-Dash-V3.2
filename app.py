@@ -104,6 +104,9 @@ from services.topology_validation import (
     validate_local_link_name,
     validate_topology,
 )
+from services.transmitter_configuration import (
+    parse_tx_delay,
+)
 from renderers.svxlink_renderer import (
     get_primary_callsign,
     render_echolink_module,
@@ -1126,7 +1129,7 @@ def initialise_port_nodes(model, profile):
             model.get("language", {}).get("default", "en_GB")
         )
         node.setdefault("configured", False)
-
+        node.setdefault("tx_delay", 500)
         node.setdefault("audio", {})
         node["audio"].setdefault("rx_audio", mapping.get("rx_audio"))
         node["audio"].setdefault("tx_audio", mapping.get("tx_audio"))
@@ -1303,7 +1306,7 @@ def port_node_page(port_id):
     node["audio"].setdefault("tx_audio", f"tx{port_id}")
     node["audio"].setdefault("deemphasis", False)
     node["audio"].setdefault("preemphasis", False)
-
+    node.setdefault("tx_delay", 500)
     node.setdefault("gpio", {})
     node["gpio"].setdefault("ptt", f"TX_{port_id}")
     node["gpio"].setdefault("cos", f"RX_{port_id}")
@@ -1334,14 +1337,32 @@ def port_node_page(port_id):
     error = None
 
     if request.method == "POST":
-        callsign = request.form.get("callsign", "").strip().upper()
-        name = request.form.get("name", "").strip()
+        callsign = request.form.get(
+            "callsign",
+            "",
+        ).strip().upper()
+
+        name = request.form.get(
+            "name",
+            "",
+        ).strip()
+
         name = name.capitalize() if name else ""
 
+        tx_delay, tx_delay_errors = parse_tx_delay(
+            request.form.get("tx_delay"),
+            f"Port {port_id} TX delay",
+        )
+
         if not callsign:
-            error = "Please enter a callsign for this port."
+            error = (
+                "Please enter a callsign for this port."
+            )
+        elif tx_delay_errors:
+            error = " ".join(tx_delay_errors)
         else:
             node["callsign"] = callsign
+            node["tx_delay"] = tx_delay
             node["name"] = name or node.get("name") or f"Port {port_id} {node.get('role', '').title()}"
             node["audio"]["deemphasis"] = (
                 request.form.get("deemphasis") == "1"
@@ -1530,6 +1551,27 @@ def port_squelch_detail_page(port_id):
             )
         )
 
+        if hardware.get("family") == "ics":
+            ptt_source = "gpiod"
+        elif squelch.get("method") == "ctcss":
+            ptt_source = str(
+                request.form.get("ptt_source")
+                or ""
+            ).strip().lower()
+
+            if ptt_source not in {
+                "hidraw",
+                "gpiod",
+                "serial",
+            }:
+                squelch_errors.append(
+                    f"Port {port_id} requires a valid "
+                    "PTT source when CTCSS is used for "
+                    "squelch."
+                )
+        else:
+            ptt_source = squelch.get("method")
+
         if squelch_errors:
             error = " ".join(squelch_errors)
 
@@ -1537,7 +1579,10 @@ def port_squelch_detail_page(port_id):
             node.setdefault("gpio", {})
             node.setdefault("hidraw", {})
             node.setdefault("serial", {})
-
+            node.setdefault("interface", {})
+            node["interface"]["ptt_source"] = (
+                ptt_source
+            )
             node["gpio"]["cos_invert"] = (
                 request.form.get(
                     "sql_gpio_invert"
@@ -3241,15 +3286,25 @@ def node_page():
 
     if request.method == "POST":
         node_type = request.form.get("node_type")
-        callsign = request.form.get("callsign", "").strip().upper()
+        callsign = request.form.get(
+            "callsign",
+            "",
+        ).strip().upper()
+
+        tx_delay, tx_delay_errors = parse_tx_delay(
+            request.form.get("tx_delay"),
+        )
 
         if node_type not in ("simplex", "repeater"):
             error = "Please select Simplex or Repeater."
         elif not callsign:
             error = "Please enter a callsign."
+        elif tx_delay_errors:
+            error = " ".join(tx_delay_errors)
         else:
             model["node"]["type"] = node_type
             model["node"]["callsign"] = callsign
+            model["tx_delay"] = tx_delay
 
             model["audio"]["deemphasis"] = (
                 request.form.get("deemphasis") == "1"

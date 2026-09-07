@@ -151,7 +151,10 @@
             {% set ctcss_freq_id = "ctcss_freq" %}
             {% set ctcss_freq_name = "ctcss_freq" %}
             {% set ctcss_freq_value = squelch.get("ctcss_freq") %}
-            {% set show_ctcss_tx = false %}
+            {% set show_ctcss_tx = true %}
+            {% set ctcss_tx_id = "ctcss_tx" %}
+            {% set ctcss_tx_name = "ctcss_tx" %}
+            {% set ctcss_tx_value = squelch.get("ctcss_tx", false) %}
             {% include "config/ctcss_controls.html" %}
         </div>
 

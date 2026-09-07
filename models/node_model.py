@@ -243,6 +243,7 @@ DEFAULT_MODEL = {
     "fx_gain_low": -12,
     "sql_hangtime": 200,
     "sql_tail_elim": 270,
+    "tx_delay": 500,
     "tg_timeout": 60,
     "tx_ctcss_mode": "ALWAYS",
     "online_control": {
@@ -492,20 +493,14 @@ def validate_squelch_configuration(
                 "CTCSS participates in SQL detection."
             )
 
-        transmit_ctcss = bool(
-            squelch.get("ctcss_tx")
-        ) or (
-            str(
-                squelch.get("ctcss_mode") or ""
-            ).strip().lower() == "rx_tx"
+    if (
+        squelch.get("ctcss_tx")
+        and squelch.get("method") != "ctcss"
+    ):
+        errors.append(
+            f"{label} may use TX CTCSS only when CTCSS "
+            "is the active SQL detector."
         )
-
-        if transmit_ctcss:
-            errors.append(
-                f"{label} cannot use TX CTCSS when CTCSS "
-                "participates in SQL detection."
-            )
-
     return errors
 
 

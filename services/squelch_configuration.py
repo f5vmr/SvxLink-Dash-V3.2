@@ -52,7 +52,12 @@ def parse_squelch_form(
         "combine_components": combine_components,
         "manual_detector": manual_detector,
         "ctcss_freq": None,
-        "ctcss_tx": False,
+        "ctcss_tx": (
+            method == "ctcss"
+            and str(
+                form.get("ctcss_tx") or ""
+            ).strip().lower() == "yes"
+        ),
     }
 
     errors = []

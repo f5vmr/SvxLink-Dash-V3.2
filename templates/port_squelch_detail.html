@@ -239,10 +239,57 @@
                     Using CTCSS for SQL prevents CTCSS-to-talkgroup selection.
                 </div>
 
+                {% if model.get("hardware", {}).get("family") != "ics" %}
+                    {% set current_ptt_source = node.get(
+                        "interface",
+                        {}
+                    ).get(
+                        "ptt_source",
+                        "gpiod"
+                    ) %}
+
+                    <div id="port_ctcss_ptt_source"
+                         class="field-group">
+
+                        <label class="label"
+                               for="ptt_source">
+                            Transmitter PTT source
+                        </label>
+
+                        <select class="input-field"
+                                id="ptt_source"
+                                name="ptt_source">
+
+                            <option value="hidraw"
+                                {% if current_ptt_source == "hidraw" %}selected{% endif %}>
+                                HIDRAW
+                            </option>
+
+                            <option value="gpiod"
+                                {% if current_ptt_source == "gpiod" %}selected{% endif %}>
+                                GPIOD
+                            </option>
+
+                            <option value="serial"
+                                {% if current_ptt_source == "serial" %}selected{% endif %}>
+                                Serial
+                            </option>
+                        </select>
+
+                        <div class="note">
+                            CTCSS provides the receive squelch decision only.
+                            Select the separate control method used to key this
+                            port’s transmitter.
+                        </div>
+                    </div>
+                {% endif %}
                 {% set ctcss_freq_id = "ctcss_freq" %}
                 {% set ctcss_freq_name = "ctcss_freq" %}
                 {% set ctcss_freq_value = squelch.get("ctcss_freq") %}
-                {% set show_ctcss_tx = false %}
+                {% set show_ctcss_tx = true %}
+                {% set ctcss_tx_id = "ctcss_tx" %}
+                {% set ctcss_tx_name = "ctcss_tx" %}
+                {% set ctcss_tx_value = squelch.get("ctcss_tx", false) %}
                 {% include "config/ctcss_controls.html" %}
             </div>
 

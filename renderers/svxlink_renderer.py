@@ -232,17 +232,20 @@ def render_report_ctcss(model):
 
 def render_tx_ctcss_logic(model):
     """
-    Render TX_CTCSS logic line if TX CTCSS enabled.
+    Render the optional TX CTCSS logic setting.
+    TX CTCSS is available only with active CTCSS SQL.
     """
 
     squelch = model.get("squelch", {})
 
-    if not squelch.get("ctcss_tx"):
-        return ""
+    if (
+        squelch.get("method") == "ctcss"
+        and squelch.get("ctcss_freq")
+        and squelch.get("ctcss_tx")
+    ):
+        return "TX_CTCSS=ALWAYS"
 
-    mode = model.get("tx_ctcss_mode", "ALWAYS")
-
-    return f"TX_CTCSS={mode}"
+    return "#TX_CTCSS=ALWAYS"
 
 def render_open_on_ctcss_line(model):
     """
@@ -703,12 +706,16 @@ def render_tx_ptt_block(model):
 
 def render_tx_ctcss_block(model):
     """
-    Render TX-side CTCSS block.
+    Render TX-side CTCSS using the active RX CTCSS
+    frequency and the upstream default level.
     """
 
     squelch = model.get("squelch", {})
 
-    if not squelch.get("ctcss_tx"):
+    if (
+        squelch.get("method") != "ctcss"
+        or not squelch.get("ctcss_tx")
+    ):
         return ""
 
     freq = squelch.get("ctcss_freq")
@@ -939,15 +946,19 @@ def render_port_report_ctcss(node):
 
 def render_port_tx_ctcss_logic(node):
     """
-    Render TX_CTCSS for one multi-port node.
+    Render optional TX CTCSS for one multi-port node.
     """
 
     squelch = node.get("squelch", {})
 
-    if squelch.get("ctcss_mode") == "rx_tx":
-        return "TX_CTCSS=always"
+    if (
+        squelch.get("method") == "ctcss"
+        and squelch.get("ctcss_freq")
+        and squelch.get("ctcss_tx")
+    ):
+        return "TX_CTCSS=ALWAYS"
 
-    return "#TX_CTCSS=always"
+    return "#TX_CTCSS=ALWAYS"
 
 def resolve_gpiod_line(model, node, label):
     """
@@ -1156,6 +1167,36 @@ def render_port_rx_section(model, port_id, node):
 
     return "\n".join(lines)
 
+def render_transmitter_common_options(tx_name):
+    """
+    Render retained manual transmitter facilities.
+    """
+
+    compressor_name = f"{tx_name}_Compressor"
+
+    return "\n".join([
+        "#DTMF_TONE_LENGTH=100",
+        "#DTMF_TONE_SPACING=50",
+        "#DTMF_DIGIT_PWR=-15",
+        "#MASTER_GAIN=0.0",
+        "#OB_AFSK_ENABLE=0",
+        "#OB_AFSK_VOICE_GAIN=-6",
+        "#OB_AFSK_LEVEL=-12",
+        "#OB_AFSK_TX_DELAY=100",
+        "#IB_AFSK_ENABLE=0",
+        "#IB_AFSK_LEVEL=-6",
+        "#IB_AFSK_TX_DELAY=100",
+        f"#LADSPA_PLUGINS=hpf:1000,@{compressor_name}",
+        "",
+        f"#[{compressor_name}]",
+        "#LABEL=tap_dynamics_m",
+        "#Attack=4",
+        "#Release=500",
+        "#Offset Gain=15",
+        "#Makeup Gain=15",
+        "#Function=13",
+    ])
+
 def render_port_tx_section(model, port_id, node):
     """
     Render one Tx section for a multi-port node.
@@ -1170,18 +1211,51 @@ def render_port_tx_section(model, port_id, node):
     audio_dev = audio.get("tx_audio", f"alsa:tx{port_id}")
 
     method = squelch.get("method", "gpiod")
-    ctcss_mode = squelch.get("ctcss_mode", "radio")
+
+    if (
+        model.get("hardware", {}).get("family")
+        == "ics"
+    ):
+        ptt_source = "gpiod"
+    else:
+        ptt_source = (
+            node.get(
+                "interface",
+                {},
+            ).get(
+                "ptt_source"
+            )
+        )
+
+        if ptt_source not in {
+            "hidraw",
+            "gpiod",
+            "serial",
+        }:
+            # Migration fallback for models saved before
+            # per-port PTT selection was introduced.
+            if method in {
+                "hidraw",
+                "gpiod",
+                "serial",
+            }:
+                ptt_source = method
+            else:
+                ptt_source = "gpiod"
+
     ctcss_freq = squelch.get("ctcss_freq")
 
     lines = [
         f"[{tx_name}]",
         "TYPE=Local",
+        "#TX_ID=T",
         f"AUDIO_DEV={audio_dev}",
         "AUDIO_CHANNEL=0",
-        f"PREEMPHASIS={1 if audio.get('preemphasis', False) else 0}",
+        "#AUDIO_DEV_KEEP_OPEN=0",
+        "#LIMITER_THRESH=-6",
     ]
 
-    if method == "hidraw":
+    if ptt_source == "hidraw":
         hidraw = node.get("hidraw", {})
 
         try:
@@ -1199,6 +1273,23 @@ def render_port_tx_section(model, port_id, node):
             "PTT_TYPE=Hidraw",
             f"HID_DEVICE={device}",
             f"HID_PTT_PIN={pin}",
+        ])
+
+    elif ptt_source == "serial":
+        serial = node.get("serial", {})
+
+        lines.extend([
+            "PTT_TYPE=SerialPin",
+            "PTT_PORT="
+            + serial.get(
+                "ptt_port",
+                "/dev/ttyS0",
+            ),
+            "PTT_PIN="
+            + serial.get(
+                "ptt_pin",
+                "DTRRTS",
+            ),
         ])
 
     else:
@@ -1219,11 +1310,34 @@ def render_port_tx_section(model, port_id, node):
             f"PTT_GPIOD_LINE={ptt_line}",
         ])
 
-    if ctcss_mode == "rx_tx" and ctcss_freq:
+    lines.extend([
+        "#GPIO_PATH=/sys/class/gpio",
+        "#PTT_HANGTIME=1000",
+        "#TIMEOUT=0",
+        f"TX_DELAY={node.get('tx_delay', 500)}",
+    ])
+
+    if (
+        method == "ctcss"
+        and squelch.get("ctcss_tx")
+        and ctcss_freq
+    ):
         lines.extend([
             f"CTCSS_FQ={ctcss_freq}",
-            "CTCSS_LEVEL=9",
+            "CTCSS_LEVEL=-24",
         ])
+
+    lines.extend([
+        (
+            "PREEMPHASIS=1"
+            if audio.get("preemphasis", False)
+            else "PREEMPHASIS=0"
+        ),
+        "",
+        render_transmitter_common_options(
+            tx_name
+        ),
+    ])
 
     return "\n".join(lines)
 
@@ -2051,6 +2165,10 @@ def render_svxlink_config(model):
 
         "DEEMPHASIS": 1 if model.get("audio", {}).get("deemphasis", False) else 0,
         "PREEMPHASIS": 1 if model.get("audio", {}).get("preemphasis", False) else 0,
+        "TX_DELAY": model.get(
+            "tx_delay",
+            500,
+        ),
         "RX_SQL_BLOCK": render_rx_sql_block(model),
         "RX_CTCSS_BLOCK": render_rx_ctcss_block(model),
         "RX_GPIOD_BLOCK": render_rx_gpiod_block(model),
@@ -2065,6 +2183,11 @@ def render_svxlink_config(model):
 
         "TX_PTT_BLOCK": render_tx_ptt_block(model),
         "TX_CTCSS_BLOCK": render_tx_ctcss_block(model),
+        "TX_COMMON_OPTIONS": (
+            render_transmitter_common_options(
+                "Tx1"
+            )
+        ),
         "SQL_TAIL_ELIM": model.get(
             "sql_tail_elim",
             270,

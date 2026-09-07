@@ -17,6 +17,10 @@
             "{{ ctcss_section_id }}"
         );
 
+        const ctcssPttSection = document.getElementById(
+            "port_ctcss_ptt_source"
+        );
+
         const standardMethods = document.querySelectorAll(
             'input[name="squelch_method"]'
         );
@@ -68,10 +72,15 @@
 
             const standard = selectedStandardMethod();
 
-            const ctcssRequired = (
+            const activeCtcss = Boolean(
                 standard
                 && standard.value === "ctcss"
-            ) || combineUsesCtcss();
+            );
+
+            const ctcssRequired = (
+                activeCtcss
+                || combineUsesCtcss()
+            );
 
             ctcssSection.classList.toggle(
                 "muted-section",
@@ -83,6 +92,40 @@
             ).forEach(function (control) {
                 control.disabled = !ctcssRequired;
             });
+            const ctcssTxControl = (
+                ctcssSection.querySelector(
+                    'select[name="ctcss_tx"]'
+                )
+            );
+
+            if (ctcssTxControl) {
+                ctcssTxControl.disabled = !activeCtcss;
+
+                const ctcssTxGroup = (
+                    ctcssTxControl.closest(
+                        ".field-group"
+                    )
+                );
+
+                if (ctcssTxGroup) {
+                    ctcssTxGroup.classList.toggle(
+                        "muted-section",
+                        !activeCtcss
+                    );
+                }
+            }
+            if (ctcssPttSection) {
+                ctcssPttSection.classList.toggle(
+                    "muted-section",
+                    !activeCtcss
+                );
+
+                ctcssPttSection.querySelectorAll(
+                    "select, input"
+                ).forEach(function (control) {
+                    control.disabled = !activeCtcss;
+                });
+            }
         }
 
         advanced.addEventListener("change", function () {

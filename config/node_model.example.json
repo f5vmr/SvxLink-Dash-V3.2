@@ -132,6 +132,7 @@
     "fx_gain_low": -12,
     "sql_hangtime": 200,
     "sql_tail_elim": 270,
+    "tx_delay": 500,
     "tg_timeout": 60,
     "tx_ctcss_mode": "ALWAYS",
     "online_control": {

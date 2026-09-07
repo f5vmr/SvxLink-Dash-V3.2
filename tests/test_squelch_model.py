@@ -272,16 +272,25 @@ class SquelchValidationTests(unittest.TestCase):
             " ".join(self.errors(squelch)),
         )
 
-    def test_ctcss_sql_disables_tx_ctcss(self):
+    def test_tx_ctcss_follows_active_ctcss_sql(self):
         squelch = self.valid_squelch()
+
         squelch.update({
             "method": "ctcss",
             "ctcss_freq": "88.5",
             "ctcss_tx": True,
         })
 
+        self.assertEqual(
+            self.errors(squelch),
+            [],
+        )
+
+        squelch["method"] = "gpiod"
+        squelch["ctcss_freq"] = None
+
         self.assertIn(
-            "cannot use TX CTCSS",
+            "only when CTCSS is the active SQL detector",
             " ".join(self.errors(squelch)),
         )
 
