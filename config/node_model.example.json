@@ -130,7 +130,7 @@
     "time_format": "24",
     "fx_gain_normal": 0,
     "fx_gain_low": -12,
-    "sql_hangtime": 20,
+    "sql_hangtime": 200,
     "sql_tail_elim": 270,
     "tg_timeout": 60,
     "tx_ctcss_mode": "ALWAYS",

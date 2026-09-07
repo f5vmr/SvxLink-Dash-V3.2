@@ -271,48 +271,40 @@ def render_open_on_ctcss_line(model):
 
 def render_rx_sql_block(model):
     """
-    Render SQL_DET line.
+    Render the selected active Standard SQL detector.
     """
 
-    interface = model.get("interface", {})
-    squelch = model.get("squelch", {})
+    method = model.get(
+        "squelch",
+        {},
+    ).get(
+        "method",
+        "gpiod",
+    )
 
-    interface_mode = interface.get("mode")
-    squelch_method = squelch.get("method")
+    detector_lines = {
+        "hidraw": "SQL_DET=HIDRAW",
+        "gpiod": "SQL_DET=GPIOD",
+        "serial": "SQL_DET=SERIAL",
+        "ctcss": "SQL_DET=CTCSS",
+    }
 
-    if interface_mode == "hidraw":
-        return "SQL_DET=HIDRAW"
-
-    if interface_mode == "hybrid":
-        if squelch_method == "ctcss":
-            return "SQL_DET=CTCSS"
-
-        return "SQL_DET=GPIOD"
-#    if squelch_method == "gpiod_ctcss":
-#        return "\n".join([
-#            "SQL_DET=COMBINE",
-#            "SQL_COMBINE=(Rx1:CTCSS)&(Rx1:GPIOD)",
-#        ])
-    if squelch_method == "ctcss":
-        return "SQL_DET=CTCSS"
-    if squelch_method == "serial":
-        return "SQL_DET=SERIAL"
-#    if squelch_method == "serial_ctcss":
-#        return "\n".join([
-#        "SQL_DET=COMBINE",
-#        "SQL_COMBINE=(Rx1:CTCSS)&(Rx1:SERIAL)",
-#        ])
-    return "SQL_DET=GPIOD"
+    return detector_lines.get(
+        method,
+        "SQL_DET=GPIOD",
+    )
 
 
 def render_rx_ctcss_block(model):
     """
-    Render CTCSS RX block.
+    Render the active single-port CTCSS SQL settings.
+
+    Advanced decoder tuning remains commented for manual use.
     """
 
     squelch = model.get("squelch", {})
 
-    if squelch.get("method") != ("ctcss"):
+    if squelch.get("method") != "ctcss":
         return ""
 
     freq = squelch.get("ctcss_freq")
@@ -321,15 +313,15 @@ def render_rx_ctcss_block(model):
         return ""
 
     return "\n".join([
-        "CTCSS_MODE=4",
+        "CTCSS_MODE=3",
         f"CTCSS_FQ={freq}",
-        "CTCSS_SNR_OFFSET=0",
+        "#CTCSS_SNR_OFFSET=0",
         "#CTCSS_SNR_OFFSETS=88.5:-1.0,136.5:-0.5",
-        "CTCSS_OPEN_THRESH=15",
-        "CTCSS_CLOSE_THRESH=9",
-        "CTCSS_BPF_LOW=60",
-        "CTCSS_BPF_HIGH=270",
-        "CTCSS_EMIT_TONE_DETECTED=0",
+        "#CTCSS_OPEN_THRESH=15",
+        "#CTCSS_CLOSE_THRESH=9",
+        "#CTCSS_BPF_LOW=60",
+        "#CTCSS_BPF_HIGH=270",
+        "#CTCSS_EMIT_TONE_DETECTED=0",
     ])
 
 
@@ -344,16 +336,14 @@ def render_rx_gpiod_block(model):
     PTT GPIOD is rendered separately.
     """
 
-    interface = model.get("interface", {})
-    squelch_method = model.get("squelch", {}).get("method")
+    squelch_method = model.get(
+        "squelch",
+        {},
+    ).get(
+        "method",
+    )
 
-    if squelch_method == "ctcss":
-        return ""
-
-    if interface.get("mode") == "hidraw":
-        return ""
-
-    if interface.get("sql_source") != "gpiod":
+    if squelch_method != "gpiod":
         return ""
 
     gpio = model.get("gpio", {}).get("sql", {})
@@ -379,9 +369,10 @@ def render_rx_hidraw_block(model):
     Render RX HIDRAW block.
     """
 
-    interface = model.get("interface", {})
-
-    if interface.get("sql_source") != "hidraw":
+    if (
+        model.get("squelch", {}).get("method")
+        != "hidraw"
+    ):
         return ""
 
     hid = model.get("hidraw", {})
@@ -395,6 +386,190 @@ def render_rx_hidraw_block(model):
         f"HID_DEVICE={device}",
         f"HID_SQL_PIN={pin}",
     ])
+
+def render_commented_squelch_example(
+    squelch,
+    rx_name,
+):
+    """
+    Render the selected Advanced or specialist SQL example.
+
+    Every generated line is commented. The operator must configure,
+    verify and activate the example manually.
+    """
+
+    if not isinstance(squelch, dict):
+        return ""
+
+    advanced_example = squelch.get(
+        "advanced_example"
+    )
+
+    manual_detector = squelch.get(
+        "manual_detector"
+    )
+
+    if advanced_example == "vox":
+        return "\n".join([
+            "# Advanced VOX SQL example - manual configuration required",
+            "#SQL_DET=VOX",
+            "#VOX_FILTER_DEPTH=20",
+            "#VOX_THRESH=1000",
+        ])
+
+    if advanced_example == "siglev":
+        return "\n".join([
+            "# Advanced SIGLEV SQL example - manual configuration required",
+            "#SQL_DET=SIGLEV",
+            "#SIGLEV_DET=NOISE",
+            "#SIGLEV_SLOPE=1",
+            "#SIGLEV_OFFSET=0",
+            "#SIGLEV_BOGUS_THRESH=120",
+            "#TONE_SIGLEV_MAP=100,84,60,50,37,32,28,23,19,8",
+            "#SQL_SIGLEV_OPEN_THRESH=30",
+            "#SQL_SIGLEV_CLOSE_THRESH=10",
+        ])
+
+    if advanced_example == "combine":
+        components = squelch.get(
+            "combine_components",
+            [],
+        )
+
+        component_names = [
+            str(component).strip().upper()
+            for component in components
+            if str(component).strip()
+        ]
+
+        expression = "&".join(
+            f"({rx_name}:{component})"
+            for component in component_names
+        )
+
+        lines = [
+            "# Advanced COMBINE SQL example - manual configuration required",
+            "#SQL_DET=COMBINE",
+            f"#SQL_COMBINE={expression}",
+        ]
+
+        if "VOX" in component_names:
+            lines.extend([
+                "",
+                f"#[{rx_name}:VOX]",
+                "#SQL_DET=VOX",
+                "#VOX_FILTER_DEPTH=20",
+                "#VOX_THRESH=1000",
+            ])
+
+        if "SIGLEV" in component_names:
+            lines.extend([
+                "",
+                f"#[{rx_name}:SIGLEV]",
+                "#SQL_DET=SIGLEV",
+                "#SIGLEV_DET=NOISE",
+                "#SIGLEV_SLOPE=1",
+                "#SIGLEV_OFFSET=0",
+                "#SIGLEV_BOGUS_THRESH=120",
+                "#TONE_SIGLEV_MAP=100,84,60,50,37,32,28,23,19,8",
+                "#SQL_SIGLEV_OPEN_THRESH=30",
+                "#SQL_SIGLEV_CLOSE_THRESH=10",
+            ])
+
+        if "CTCSS" in component_names:
+            frequency = str(
+                squelch.get("ctcss_freq") or ""
+            ).strip()
+
+            lines.extend([
+                "",
+                f"#[{rx_name}:CTCSS]",
+                "#SQL_DET=CTCSS",
+                "#CTCSS_MODE=3",
+                f"#CTCSS_FQ={frequency}",
+                "#CTCSS_SNR_OFFSET=0",
+                "#CTCSS_SNR_OFFSETS=88.5:-1.0,136.5:-0.5",
+                "#CTCSS_OPEN_THRESH=15",
+                "#CTCSS_CLOSE_THRESH=9",
+                "#CTCSS_BPF_LOW=60",
+                "#CTCSS_BPF_HIGH=270",
+                "#CTCSS_EMIT_TONE_DETECTED=0",
+            ])
+
+        return "\n".join(lines)
+
+    if manual_detector == "evdev":
+        return "\n".join([
+            "# Specialist EVDEV SQL example - manual configuration required",
+            "#SQL_DET=EVDEV",
+            "#EVDEV_DEVNAME=/dev/input/by-id/usb-SYNIC_SYNIC_Wireless_Audio-event-if03",
+            "#EVDEV_OPEN=1,163,1",
+            "#EVDEV_CLOSE=1,163,0",
+        ])
+
+    if manual_detector == "pty":
+        return "\n".join([
+            "# Specialist PTY SQL example - manual configuration required",
+            "#SQL_DET=PTY",
+            f"#PTY_PATH=/tmp/{rx_name.lower()}_sql",
+        ])
+
+    if manual_detector == "rtl_sdr":
+        wb_rx_name = f"WbRx{rx_name[2:]}"
+
+        return "\n".join([
+            "# Specialist RTL-SDR receiver example - manual configuration required",
+            f"#WBRX={wb_rx_name}",
+            "",
+            f"#[{wb_rx_name}]",
+            "#TYPE=RtlUsb",
+            "#DEV_MATCH=0",
+            "#HOST=localhost",
+            "#PORT=1234",
+            "#CENTER_FQ=435075000",
+            "#FQ_CORR=0",
+            "#GAIN=0",
+            "#PEAK_METER=1",
+            "#SAMPLE_RATE=960000",
+        ])
+
+    return ""
+
+def render_receiver_common_options(rx_name):
+    """
+    Render common active DTMF defaults and retained manual
+    receiver facilities.
+    """
+
+    compressor_name = f"{rx_name}_Compressor"
+
+    return "\n".join([
+        "DTMF_DEC_TYPE=INTERNAL",
+        "DTMF_MUTING=1",
+        "1750_MUTING=1",
+        "#DTMF_HANGTIME=40",
+        "#DTMF_SERIAL=/dev/ttyS0",
+        f"#DTMF_PTY=/tmp/{rx_name.lower()}_dtmf",
+        "#DTMF_MAX_FWD_TWIST=8",
+        "#DTMF_MAX_REV_TWIST=4",
+        "#SEL5_DEC_TYPE=INTERNAL",
+        "#SEL5_TYPE=ZVEI1",
+        "#FQ=433475000",
+        "#MODULATION=FM",
+        "#OB_AFSK_ENABLE=0",
+        "#OB_AFSK_VOICE_GAIN=6",
+        "#IB_AFSK_ENABLE=0",
+        f"#LADSPA_PLUGINS=hpf:1000,@{compressor_name}",
+        "",
+        f"#[{compressor_name}]",
+        "#LABEL=tap_dynamics_m",
+        "#Attack=4",
+        "#Release=500",
+        "#Offset Gain=15",
+        "#Makeup Gain=15",
+        "#Function=13",
+    ])
+
 def render_rx_combine_sections(model):
     """
     Render COMBINE detector subsections.
@@ -870,7 +1045,6 @@ def render_port_rx_section(model, port_id, node):
     audio_dev = audio.get("rx_audio", f"alsa:rx{port_id}")
 
     method = squelch.get("method", "gpiod")
-    ctcss_mode = squelch.get("ctcss_mode", "radio")
     ctcss_freq = squelch.get("ctcss_freq")
 
     lines = [
@@ -938,20 +1112,46 @@ def render_port_rx_section(model, port_id, node):
         ])
 
     lines.extend([
-        f"SQL_HANGTIME={model.get('sql_hangtime', 20)}",
+        "SQL_START_DELAY=0",
+        "SQL_DELAY=0",
+        "SQL_HANGTIME=200",
+        "#SQL_EXTENDED_HANGTIME=1000",
+        "#SQL_EXTENDED_HANGTIME_THRESH=15",
+        "#SQL_TIMEOUT=0",
         f"SQL_TAIL_ELIM={model.get('sql_tail_elim', 270)}",
     ])
 
-    if method == "ctcss" and ctcss_mode in ("rx", "rx_tx") and ctcss_freq:
+    if method == "ctcss" and ctcss_freq:
         lines.extend([
-            "CTCSS_MODE=4",
+            "CTCSS_MODE=3",
             f"CTCSS_FQ={ctcss_freq}",
-            "CTCSS_SNR_OFFSET=0",
-            "CTCSS_OPEN_THRESH=15",
-            "CTCSS_CLOSE_THRESH=9",
-            "CTCSS_BPF_LOW=60",
-            "CTCSS_BPF_HIGH=270",
-            "CTCSS_EMIT_TONE_DETECTED=0",
+            "#CTCSS_SNR_OFFSET=0",
+            "#CTCSS_SNR_OFFSETS=88.5:-1.0,136.5:-0.5",
+            "#CTCSS_OPEN_THRESH=15",
+            "#CTCSS_CLOSE_THRESH=9",
+            "#CTCSS_BPF_LOW=60",
+            "#CTCSS_BPF_HIGH=270",
+            "#CTCSS_EMIT_TONE_DETECTED=0",
+        ])
+
+    lines.extend([
+        "",
+        render_receiver_common_options(
+            rx_name
+        ),
+    ])
+
+    manual_example = (
+        render_commented_squelch_example(
+            squelch,
+            rx_name,
+        )
+    )
+
+    if manual_example:
+        lines.extend([
+            "",
+            manual_example,
         ])
 
     return "\n".join(lines)
@@ -1841,6 +2041,14 @@ def render_svxlink_config(model):
             model.get("audio", {}).get("audio_dev")
             or "alsa:plughw:0"
         ),
+        "AUDIO_CHANNEL": model.get(
+            "audio",
+            {},
+        ).get(
+            "audio_channel",
+            0,
+        ),
+
         "DEEMPHASIS": 1 if model.get("audio", {}).get("deemphasis", False) else 0,
         "PREEMPHASIS": 1 if model.get("audio", {}).get("preemphasis", False) else 0,
         "RX_SQL_BLOCK": render_rx_sql_block(model),
@@ -1848,12 +2056,24 @@ def render_svxlink_config(model):
         "RX_GPIOD_BLOCK": render_rx_gpiod_block(model),
         "RX_HIDRAW_BLOCK": render_rx_hidraw_block(model),
         "RX_SERIAL_BLOCK": render_rx_serial_block(model),
-        "RX_COMBINE_SECTIONS": render_rx_combine_sections(model),
+        "RX_MANUAL_SQL_EXAMPLE": (
+            render_commented_squelch_example(
+                model.get("squelch", {}),
+                "Rx1",
+            )
+        ),
 
         "TX_PTT_BLOCK": render_tx_ptt_block(model),
         "TX_CTCSS_BLOCK": render_tx_ctcss_block(model),
-        "SQL_HANGTIME": model.get("sql_hangtime", 20),
-        "SQL_TAIL_ELIM": model.get("sql_tail_elim", 270),
+        "SQL_TAIL_ELIM": model.get(
+            "sql_tail_elim",
+            270,
+        ),
+        "RX_COMMON_OPTIONS": (
+            render_receiver_common_options(
+                "Rx1"
+            )
+        ),
 
         "MACROS_SECTION": render_macros(model),
     }

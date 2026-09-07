@@ -27,8 +27,8 @@
   },
   "port_map": {
     "1": {
-      "rx_audio": "plughw:0",
-      "tx_audio": "plughw:0",
+      "rx_audio": "alsa:plughw:0",
+      "tx_audio": "alsa:plughw:0",
       "hidraw_device": "/dev/hidraw0",
       "hidraw_sql_pin": "VOL_DN",
       "hidraw_ptt_pin": "GPIO3",
@@ -38,8 +38,8 @@
       "control": "per_port_selected"
     },
     "2": {
-      "rx_audio": "plughw:1",
-      "tx_audio": "plughw:1",
+      "rx_audio": "alsa:plughw:1",
+      "tx_audio": "alsa:plughw:1",
       "hidraw_device": "/dev/hidraw1",
       "hidraw_sql_pin": "VOL_DN",
       "hidraw_ptt_pin": "GPIO3",
