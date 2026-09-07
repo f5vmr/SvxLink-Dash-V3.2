@@ -1323,7 +1323,10 @@ def render_location_info(model):
 
 def render_reflector_logic(model):
     """
-    Render ReflectorLogic section if enabled.
+    Render the route-specific ReflectorLogic section.
+
+    Route-specific settings are authoritative. Legacy flat fields
+    remain available only as migration fallback.
     """
 
     reflector = model.get("reflector", {})
@@ -1331,32 +1334,170 @@ def render_reflector_logic(model):
     if not reflector.get("enabled"):
         return ""
 
-    host = reflector.get("host", "")
+    route = str(
+        reflector.get("route") or ""
+    ).strip().lower()
 
-    monitor_tgs = reflector.get(
+    if route not in (
+        "federation",
+        "v2",
+        "v3",
+    ):
+        # Legacy enabled reflectors without an explicit route used
+        # Protocol 2 authentication.
+        route = "v2"
+
+    route_settings = reflector.get(route, {})
+
+    if not isinstance(route_settings, dict):
+        route_settings = {}
+
+    def connection_value(key, default=""):
+        value = route_settings.get(key)
+
+        if value not in (
+            None,
+            "",
+        ):
+            return value
+
+        value = reflector.get(key)
+
+        if value not in (
+            None,
+            "",
+        ):
+            return value
+
+        return default
+
+    operational = reflector.get(
+        "operational",
+        {},
+    )
+
+    if not isinstance(operational, dict):
+        operational = {}
+
+    def operational_value(key, default):
+        if key in operational:
+            return operational[key]
+
+        if key in reflector:
+            return reflector[key]
+
+        if key in route_settings:
+            return route_settings[key]
+
+        return default
+
+    monitor_tgs = operational_value(
         "monitor_tgs",
-        []
-)
+        [],
+    )
 
     if isinstance(monitor_tgs, list):
         monitor_tgs = ",".join(
-            str(x) for x in monitor_tgs
+            str(talkgroup).strip()
+            for talkgroup in monitor_tgs
+            if str(talkgroup).strip()
+        )
+    elif monitor_tgs is None:
+        monitor_tgs = ""
+    else:
+        monitor_tgs = str(
+            monitor_tgs
+        ).strip()
+
+    tg_select_timeout = operational.get(
+        "tg_select_timeout",
+        model.get("tg_timeout", 60),
     )
 
-    if not monitor_tgs:
-        monitor_tgs = "0"
+    values = {
+        "REFLECTOR_HOST": connection_value(
+            "host"
+        ),
+        "REFLECTOR_PORT": connection_value(
+            "port"
+        ),
+        "CALLSIGN": get_primary_callsign(
+            model
+        ),
+        "DEFAULT_TG": operational_value(
+            "default_tg",
+            0,
+        ),
+        "MONITOR_TGS": monitor_tgs,
+        "TG_SELECT_TIMEOUT": (
+            tg_select_timeout
+        ),
+        "TG_SELECT_INHIBIT_TIMEOUT": 60,
+        "DEFAULT_LANG": get_default_language(
+            model
+        ),
+    }
+
+    if route == "v3":
+        subject = route_settings.get(
+            "subject",
+            {},
+        )
+
+        if not isinstance(subject, dict):
+            subject = {}
+
+        values.update({
+            "CERT_GIVEN_NAME": subject.get(
+                "given_name",
+                "",
+            ),
+            "CERT_SURNAME": subject.get(
+                "surname",
+                "",
+            ),
+            "CERT_ORGANIZATIONAL_UNIT": subject.get(
+                "organizational_unit",
+                "",
+            ),
+            "CERT_ORGANIZATION": subject.get(
+                "organization",
+                "",
+            ),
+            "CERT_LOCALITY": subject.get(
+                "locality",
+                "",
+            ),
+            "CERT_STATE_OR_PROVINCE": subject.get(
+                "state_or_province",
+                "",
+            ),
+            "CERT_COUNTRY": subject.get(
+                "country",
+                "",
+            ),
+            "CERT_EMAIL": subject.get(
+                "email",
+                "",
+            ),
+        })
+
+        template_name = (
+            "reflector_logic_v3.template"
+        )
+
+    else:
+        values["REFLECTOR_AUTH_KEY"] = (
+            connection_value("auth_key")
+        )
+
+        template_name = (
+            "reflector_logic.template"
+        )
 
     return render_config_template(
-        "reflector_logic.template",
-        {
-            "REFLECTOR_HOST": reflector["host"],
-            "REFLECTOR_PORT": reflector["port"],
-            "CALLSIGN": get_primary_callsign(model),
-            "REFLECTOR_AUTH_KEY": reflector["auth_key"],
-            "MONITOR_TGS": monitor_tgs,
-            "TG_SELECT_TIMEOUT": model.get("tg_timeout", 60),
-            "DEFAULT_LANG": get_default_language(model),
-        }
+        template_name,
+        values,
     )
 
 def render_link_to_reflector(model):

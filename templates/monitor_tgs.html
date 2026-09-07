@@ -36,7 +36,84 @@
     </div>
 
     <form method="post">
+        <div class="form-section">
+            <div class="label">
+                Reflector TalkGroup behaviour
+            </div>
 
+            <div class="field-group">
+                <label class="label"
+                       for="default_tg">
+                    Default TalkGroup
+                </label>
+
+                <input class="input-field"
+                       id="default_tg"
+                       name="default_tg"
+                       type="number"
+                       min="0"
+                       step="1"
+                       value="{{ operational.get(
+                           'default_tg',
+                           0
+                       ) }}">
+
+                <div class="note">
+                    Use 0 for no default TalkGroup. A positive
+                    default TalkGroup is selected for local traffic
+                    when no other TalkGroup is active.
+                    <br><br>
+                    A non-zero default may take precedence over
+                    ordinary monitored TalkGroups. A monitored
+                    TalkGroup requires a higher priority using
+                    <strong>+</strong> or
+                    <strong>++</strong> where appropriate.
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label class="label"
+                       for="tg_select_timeout">
+                    TalkGroup selection timeout
+                </label>
+
+                <input class="input-field"
+                       id="tg_select_timeout"
+                       name="tg_select_timeout"
+                       type="number"
+                       min="1"
+                       step="1"
+                       value="{{ operational.get(
+                           'tg_select_timeout',
+                           60
+                       ) }}">
+
+                <div class="note">
+                    Seconds of inactivity before the selected
+                    TalkGroup is released. The dashboard default
+                    is 60 seconds.
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="label">
+                Monitoring TalkGroups
+            </div>
+
+            <div class="note">
+                Enter a positive TalkGroup number. Append
+                <strong>+</strong> for increased priority or
+                <strong>++</strong> for highest priority.
+                Examples:
+                <strong>235</strong>,
+                <strong>23560+</strong> and
+                <strong>23570++</strong>.
+                <br><br>
+                The same underlying TalkGroup must not be entered
+                more than once, even with a different priority.
+            </div>
+        </div>
         <table class="dashboard-table">
             <thead>
                 <tr>

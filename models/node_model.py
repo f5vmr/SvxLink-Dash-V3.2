@@ -99,8 +99,17 @@ DEFAULT_MODEL = {
         "port": None,
         "auth_key": None,
 
+        "operational": {
+            "default_tg": 0,
+            "monitor_tgs": [],
+            "tg_select_timeout": 60,
+        },
+
         "federation": {
             "network_id": None,
+            "name": None,
+            "host": None,
+            "port": None,
             "auth_key": None,
         },
 
@@ -109,16 +118,12 @@ DEFAULT_MODEL = {
             "host": None,
             "port": None,
             "auth_key": None,
-            "default_tg": 0,
-            "monitor_tgs": [],
         },
 
         "v3": {
             "name": None,
             "host": None,
             "port": None,
-            "default_tg": 0,
-            "monitor_tgs": [],
             "subject": {
                 "given_name": None,
                 "surname": None,
@@ -422,8 +427,25 @@ def validate_model(model):
                 federation.get("network_id") or ""
             ).strip()
 
+            name = (
+                federation.get("name")
+                or reflector.get("name")
+            )
+
+            host = (
+                federation.get("host")
+                or reflector.get("host")
+            )
+
+            port = (
+                federation.get("port")
+                or reflector.get("port")
+            )
+
             auth_key = str(
-                federation.get("auth_key") or ""
+                federation.get("auth_key")
+                or reflector.get("auth_key")
+                or ""
             )
 
             if not network_id:
@@ -437,21 +459,35 @@ def validate_model(model):
                     "exactly 16 characters."
                 )
 
-            if not reflector.get("host"):
-                errors.append("Reflector host is required.")
+            if not name:
+                errors.append(
+                    "Federation Family reflector name is required."
+                )
 
-            if not reflector.get("port"):
-                errors.append("Reflector port is required.")
+            if not host:
+                errors.append(
+                    "Federation Family reflector host is required."
+                )
+
+            if not port:
+                errors.append(
+                    "Federation Family reflector port is required."
+                )
 
         elif route == "v2":
             v2 = reflector.get("v2", {})
 
+            name = v2.get("name") or reflector.get("name")
             host = v2.get("host") or reflector.get("host")
             port = v2.get("port") or reflector.get("port")
             auth_key = (
                 v2.get("auth_key")
                 or reflector.get("auth_key")
             )
+            if not name:
+                errors.append(
+                    "Protocol 2 reflector name is required."
+                )
 
             if not host:
                 errors.append("Protocol 2 reflector host is required.")
@@ -469,8 +505,14 @@ def validate_model(model):
             v3 = reflector.get("v3", {})
             subject = v3.get("subject", {})
 
+            name = v3.get("name") or reflector.get("name")
             host = v3.get("host") or reflector.get("host")
             port = v3.get("port") or reflector.get("port")
+
+            if not name:
+                errors.append(
+                    "Protocol 3 reflector name is required."
+                )
 
             if not host:
                 errors.append("Protocol 3 reflector host is required.")

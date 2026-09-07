@@ -4114,23 +4114,17 @@ def reflector_federation_page():
                 selected_network_id
             ]
 
-            federation["network_id"] = selected_network_id
-            federation["auth_key"] = auth_key
+            federation.update({
+                "network_id": selected_network_id,
+                "name": selected["name"],
+                "host": selected["host"],
+                "port": selected["port"],
+                "auth_key": auth_key,
+            })
 
             reflector["enabled"] = True
             reflector["route"] = "federation"
             reflector["federation"] = federation
-
-            # Legacy fields remain populated until the renderer
-            # moves completely to the version 2 route structure.
-            reflector["name"] = selected["name"]
-            reflector["host"] = selected["host"]
-            reflector["port"] = selected["port"]
-            reflector["auth_key"] = auth_key
-            # Talkgroups are managed later from the main dashboard.
-            # Preserve existing operational choices during reconfiguration.
-            reflector.setdefault("default_tg", 0)
-            reflector.setdefault("monitor_tgs", [])
 
             model["reflector"] = reflector
             save_node_model(model)
@@ -4201,37 +4195,16 @@ def reflector_v2_page():
             )
 
         else:
-            # Preserve operational talkgroup settings. These are
-            # managed later from the main dashboard.
-            default_tg = reflector.get(
-                "default_tg",
-                v2.get("default_tg", 0),
-            )
-
-            monitor_tgs = reflector.get(
-                "monitor_tgs",
-                v2.get("monitor_tgs", []),
-            )
-
-            v2["name"] = name
-            v2["host"] = host
-            v2["port"] = port
-            v2["auth_key"] = auth_key
-            v2["default_tg"] = default_tg
-            v2["monitor_tgs"] = monitor_tgs
+            v2.update({
+                "name": name,
+                "host": host,
+                "port": port,
+                "auth_key": auth_key,
+            })
 
             reflector["enabled"] = True
             reflector["route"] = "v2"
             reflector["v2"] = v2
-
-            # Keep legacy fields populated until the renderer
-            # has moved completely to the route-specific structure.
-            reflector["name"] = name
-            reflector["host"] = host
-            reflector["port"] = port
-            reflector["auth_key"] = auth_key
-            reflector["default_tg"] = default_tg
-            reflector["monitor_tgs"] = monitor_tgs
 
             model["reflector"] = reflector
             save_node_model(model)
@@ -4358,46 +4331,31 @@ def reflector_v3_page():
             error = "Please enter a valid certificate email address."
 
         else:
-            # Preserve operational talkgroup settings. These are
-            # managed later from the main dashboard.
-            default_tg = reflector.get(
-                "default_tg",
-                v3.get("default_tg", 0),
-            )
+            subject.update({
+                "given_name": given_name,
+                "surname": surname,
+                "organizational_unit": (
+                    organizational_unit
+                ),
+                "organization": organization,
+                "locality": locality,
+                "state_or_province": (
+                    state_or_province
+                ),
+                "country": country,
+                "email": email,
+            })
 
-            monitor_tgs = reflector.get(
-                "monitor_tgs",
-                v3.get("monitor_tgs", []),
-            )
-
-            subject["given_name"] = given_name
-            subject["surname"] = surname
-            subject["organizational_unit"] = organizational_unit
-            subject["organization"] = organization
-            subject["locality"] = locality
-            subject["state_or_province"] = state_or_province
-            subject["country"] = country
-            subject["email"] = email
-
-            v3["name"] = name
-            v3["host"] = host
-            v3["port"] = port
-            v3["default_tg"] = default_tg
-            v3["monitor_tgs"] = monitor_tgs
-            v3["subject"] = subject
+            v3.update({
+                "name": name,
+                "host": host,
+                "port": port,
+                "subject": subject,
+            })
 
             reflector["enabled"] = True
             reflector["route"] = "v3"
             reflector["v3"] = v3
-
-            # Keep the shared fields populated until rendering is
-            # fully route-specific.
-            reflector["name"] = name
-            reflector["host"] = host
-            reflector["port"] = port
-            reflector["auth_key"] = None
-            reflector["default_tg"] = default_tg
-            reflector["monitor_tgs"] = monitor_tgs
 
             model["reflector"] = reflector
             save_node_model(model)
@@ -4915,12 +4873,10 @@ def status_page():
         selected_port=selected_port,
     )
 
-    monitor_tgs = model.get(
-        "reflector",
-        {}
-    ).get(
-        "monitor_tgs",
-        []
+    monitor_tgs = (
+        model.get("reflector", {})
+        .get("operational", {})
+        .get("monitor_tgs", [])
     )
 
     activity = get_reflector_activity()
@@ -5378,73 +5334,302 @@ def macros_page():
         saved=saved,
         error=error,
     )
+def normalise_monitor_talkgroup(value):
+    """
+    Validate and normalize one Monitoring TalkGroup entry.
+
+    A valid entry is a positive integer followed by zero, one,
+    or two priority plus signs.
+    """
+
+    value = str(value or "").strip()
+
+    if not value:
+        return ""
+
+    priority_length = (
+        len(value)
+        - len(value.rstrip("+"))
+    )
+
+    if priority_length > 2:
+        raise ValueError(
+            "Monitoring TalkGroup priority may use "
+            "only + or ++."
+        )
+
+    talkgroup_number = value[
+        :len(value) - priority_length
+        if priority_length
+        else len(value)
+    ]
+
+    if (
+        not talkgroup_number.isdigit()
+        or int(talkgroup_number) <= 0
+    ):
+        raise ValueError(
+            "A Monitoring TalkGroup must be a "
+            "positive number, optionally followed "
+            "by + or ++."
+        )
+
+    priority = "+" * priority_length
+
+    return (
+        str(int(talkgroup_number))
+        + priority
+    )
 @app.route("/monitor-tgs", methods=["GET", "POST"])
 def monitor_tgs_page():
     saved = request.args.get("saved")
+
     if not session.get("authorised"):
-        return redirect(url_for("authorise_page", next=request.path))
+        return redirect(
+            url_for(
+                "authorise_page",
+                next=request.path,
+            )
+        )
+
     model = load_node_model()
+    reflector = model.setdefault(
+        "reflector",
+        {},
+    )
+    operational = reflector.setdefault(
+        "operational",
+        {},
+    )
+
+    operational.setdefault("default_tg", 0)
+    operational.setdefault("monitor_tgs", [])
+    operational.setdefault(
+        "tg_select_timeout",
+        60,
+    )
+
+    existing = reflector.get(
+        "monitor_tg_defs",
+        [],
+    )
+    selected = operational.get(
+        "monitor_tgs",
+        [],
+    )
+
     error = None
-
-    if "reflector" not in model:
-        model["reflector"] = {}
-
-    existing = model["reflector"].get("monitor_tg_defs", [])
-    selected = model["reflector"].get("monitor_tgs", [])
-
     monitor_rows = []
-
-    for index in range(6):
-        row = existing[index] if index < len(existing) else {}
-
-        tg_id = row.get("id", "")
-        label = row.get("label", "")
-
-        monitor_rows.append({
-            "id": tg_id,
-            "label": label,
-            "enabled": tg_id in selected,
-        })
 
     if request.method == "POST":
         updated_defs = []
         updated_selected = []
+        submitted_rows = []
+        seen_talkgroups = set()
+        errors = []
+
+        default_tg_text = str(
+            request.form.get(
+                "default_tg",
+                operational.get(
+                    "default_tg",
+                    0,
+                ),
+            )
+        ).strip()
+
+        timeout_text = str(
+            request.form.get(
+                "tg_select_timeout",
+                operational.get(
+                    "tg_select_timeout",
+                    60,
+                ),
+            )
+        ).strip()
+
+        if (
+            not default_tg_text.isdigit()
+            or int(default_tg_text) < 0
+        ):
+            errors.append(
+                "Default TalkGroup must be 0 or "
+                "a positive number."
+            )
+            default_tg = operational.get(
+                "default_tg",
+                0,
+            )
+        else:
+            default_tg = int(default_tg_text)
+
+        if (
+            not timeout_text.isdigit()
+            or int(timeout_text) <= 0
+        ):
+            errors.append(
+                "TalkGroup selection timeout must "
+                "be a positive number of seconds."
+            )
+            tg_select_timeout = operational.get(
+                "tg_select_timeout",
+                60,
+            )
+        else:
+            tg_select_timeout = int(
+                timeout_text
+            )
 
         for index in range(6):
-            tg_id = request.form.get(f"id_{index}", "").strip()
-            label = request.form.get(f"label_{index}", "").strip()
-            enabled = request.form.get(f"enabled_{index}") == "yes"
+            raw_tg_id = request.form.get(
+                f"id_{index}",
+                "",
+            ).strip()
 
-            if tg_id or label:
-                updated_defs.append({
-                    "id": tg_id,
-                    "label": label,
-                })
+            label = request.form.get(
+                f"label_{index}",
+                "",
+            ).strip()
 
-            if enabled and tg_id:
+            enabled = (
+                request.form.get(
+                    f"enabled_{index}"
+                )
+                == "yes"
+            )
+
+            try:
+                tg_id = (
+                    normalise_monitor_talkgroup(
+                        raw_tg_id
+                    )
+                )
+            except ValueError as exc:
+                tg_id = raw_tg_id
+                errors.append(
+                    f"Row {index + 1}: {exc}"
+                )
+
+            submitted_rows.append({
+                "id": tg_id,
+                "label": label,
+                "enabled": enabled,
+            })
+
+            if not tg_id:
+                if enabled:
+                    errors.append(
+                        f"Row {index + 1}: select "
+                        "requires a TalkGroup number."
+                    )
+
+                if label:
+                    updated_defs.append({
+                        "id": "",
+                        "label": label,
+                    })
+
+                continue
+
+            base_talkgroup = tg_id.rstrip("+")
+
+            if base_talkgroup in seen_talkgroups:
+                errors.append(
+                    f"TalkGroup {base_talkgroup} "
+                    "is entered more than once."
+                )
+            else:
+                seen_talkgroups.add(
+                    base_talkgroup
+                )
+
+            updated_defs.append({
+                "id": tg_id,
+                "label": label,
+            })
+
+            if enabled:
                 updated_selected.append(tg_id)
 
         if len(updated_selected) > 6:
-            error = "Please select no more than six monitoring talkgroups."
+            errors.append(
+                "Please select no more than six "
+                "Monitoring TalkGroups."
+            )
+
+        if errors:
+            error = " ".join(errors)
+            monitor_rows = submitted_rows
+
         else:
-            model["reflector"]["monitor_tg_defs"] = updated_defs
-            model["reflector"]["monitor_tgs"] = updated_selected
+            reflector["monitor_tg_defs"] = (
+                updated_defs
+            )
 
-        save_node_model(model)
+            operational["default_tg"] = (
+                default_tg
+            )
+            operational["monitor_tgs"] = (
+                updated_selected
+            )
+            operational[
+                "tg_select_timeout"
+            ] = tg_select_timeout
 
-        result = build_svxlink_configuration(
-            model,
-            restart=True,
-        )
+            reflector["operational"] = (
+                operational
+            )
+            model["reflector"] = reflector
 
-        if not result.get("success"):
-            error = "Monitoring talkgroups saved, but SvxLink rebuild/restart failed."
-        else:
-            return redirect(url_for("monitor_tgs_page", saved="1"))
+            save_node_model(model)
+
+            result = build_svxlink_configuration(
+                model,
+                restart=True,
+            )
+
+            if not result.get("success"):
+                error = (
+                    "Monitoring TalkGroups saved, "
+                    "but the SvxLink rebuild or "
+                    "restart failed."
+                )
+                existing = updated_defs
+                selected = updated_selected
+            else:
+                return redirect(
+                    url_for(
+                        "monitor_tgs_page",
+                        saved="1",
+                    )
+                )
+
+    if not monitor_rows:
+        for index in range(6):
+            row = (
+                existing[index]
+                if index < len(existing)
+                else {}
+            )
+
+            tg_id = str(
+                row.get("id") or ""
+            ).strip()
+
+            label = str(
+                row.get("label") or ""
+            ).strip()
+
+            monitor_rows.append({
+                "id": tg_id,
+                "label": label,
+                "enabled": tg_id in selected,
+            })
 
     return render_template(
         "monitor_tgs.html",
         model=model,
+        operational=operational,
         monitor_rows=monitor_rows,
         saved=saved,
         error=error,

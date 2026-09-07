@@ -28,24 +28,28 @@
         "host": null,
         "port": null,
         "auth_key": null,
+        "operational": {
+            "default_tg": 0,
+            "monitor_tgs": [],
+            "tg_select_timeout": 60
+        },
         "federation": {
             "network_id": null,
+            "name": null,
+            "host": null,
+            "port": null,
             "auth_key": null
         },
         "v2": {
             "name": null,
             "host": null,
             "port": null,
-            "auth_key": null,
-            "default_tg": 0,
-            "monitor_tgs": []
+            "auth_key": null
         },
         "v3": {
             "name": null,
             "host": null,
             "port": null,
-            "default_tg": 0,
-            "monitor_tgs": [],
             "subject": {
                 "given_name": null,
                 "surname": null,

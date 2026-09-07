@@ -201,6 +201,98 @@ def clean_stale_topology_ports(model):
             clean_members(link, "ports")
     return changed
 
+def migrate_reflector_operational(model):
+    """
+    Consolidate historical reflector talkgroup settings into the
+    installation-wide operational block.
+
+    Existing operational values take precedence. Legacy flat values
+    are preferred over old route-specific copies because the runtime
+    dashboard historically updated the flat fields.
+    """
+
+    reflector = model.get("reflector")
+
+    if not isinstance(reflector, dict):
+        return False
+
+    before = deepcopy(
+        reflector.get("operational")
+    )
+
+    operational = reflector.get("operational")
+
+    if not isinstance(operational, dict):
+        operational = {}
+
+    route = str(
+        reflector.get("route") or ""
+    ).strip().lower()
+
+    route_settings = reflector.get(route, {})
+
+    if not isinstance(route_settings, dict):
+        route_settings = {}
+
+    if "default_tg" not in operational:
+        if "default_tg" in reflector:
+            operational["default_tg"] = deepcopy(
+                reflector["default_tg"]
+            )
+        elif "default_tg" in route_settings:
+            operational["default_tg"] = deepcopy(
+                route_settings["default_tg"]
+            )
+        else:
+            operational["default_tg"] = 0
+
+    if "monitor_tgs" not in operational:
+        if "monitor_tgs" in reflector:
+            monitor_tgs = deepcopy(
+                reflector["monitor_tgs"]
+            )
+        elif "monitor_tgs" in route_settings:
+            monitor_tgs = deepcopy(
+                route_settings["monitor_tgs"]
+            )
+        else:
+            monitor_tgs = []
+
+        operational["monitor_tgs"] = monitor_tgs
+
+    monitor_tgs = operational.get(
+        "monitor_tgs"
+    )
+
+    if isinstance(monitor_tgs, list):
+        operational["monitor_tgs"] = [
+            str(talkgroup).strip()
+            for talkgroup in monitor_tgs
+            if str(talkgroup).strip()
+        ]
+
+    elif isinstance(monitor_tgs, str):
+        operational["monitor_tgs"] = [
+            talkgroup.strip()
+            for talkgroup in monitor_tgs.split(",")
+            if talkgroup.strip()
+        ]
+
+    if "tg_select_timeout" not in operational:
+        if "tg_select_timeout" in reflector:
+            operational["tg_select_timeout"] = deepcopy(
+                reflector["tg_select_timeout"]
+            )
+        elif "tg_timeout" in model:
+            operational["tg_select_timeout"] = deepcopy(
+                model["tg_timeout"]
+            )
+        else:
+            operational["tg_select_timeout"] = 60
+
+    reflector["operational"] = operational
+
+    return before != operational
 
 def migrate_node_model(model):
     """
@@ -215,10 +307,25 @@ def migrate_node_model(model):
     except (TypeError, ValueError):
         schema_version = 1
 
+    operational_changed = (
+        migrate_reflector_operational(model)
+    )
+
     if schema_version >= 2:
-        changed = merge_missing_defaults(model)
-        changed = normalise_port_ids(model) or changed
-        return clean_stale_topology_ports(model) or changed
+        changed = operational_changed
+        changed = (
+            merge_missing_defaults(model)
+            or changed
+        )
+        changed = (
+            normalise_port_ids(model)
+            or changed
+        )
+        changed = (
+            clean_stale_topology_ports(model)
+            or changed
+        )
+        return changed
 
     saved_model = deepcopy(model)
     legacy_reflector = deepcopy(model.get("reflector", {}))
