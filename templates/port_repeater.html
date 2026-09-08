@@ -18,7 +18,9 @@
                 </p>
             </div>
         </div>
-
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
         <div class="note">
             Only ports marked as <strong>Repeater</strong> need these settings.
             Simplex ports are shown for reference and will be skipped.
@@ -52,38 +54,51 @@
                         Role: {{ node.role }}<br><br>
 
                         {% if node.role == "repeater" %}
-                            <label for="port_{{ port_id }}_idle_timeout">Idle timeout, seconds</label>
+                                                        <label for="port_{{ port_id }}_idle_timeout">
+                                Idle timeout, seconds
+                            </label>
                             <input
                                 id="port_{{ port_id }}_idle_timeout"
                                 name="port_{{ port_id }}_idle_timeout"
                                 type="number"
                                 min="0"
+                                max="10"
                                 value="{{ repeater.get('idle_timeout', 10) }}"
                             >
+                            <div class="note">
+                                The short period for which this repeater
+                                remains active after the last received
+                                transmission ends. This allows the courtesy
+                                sound and a following transmission before
+                                the current operating session closes.
+                                Default 10 seconds.
+                            </div>
+                            <br>
 
-                            <br><br>
-
-                            <label for="port_{{ port_id }}_sql_timeout">Squelch timeout, seconds</label>
+                            <label for="port_{{ port_id }}_sql_timeout">
+                                SQL timeout, seconds
+                            </label>
                             <input
                                 id="port_{{ port_id }}_sql_timeout"
                                 name="port_{{ port_id }}_sql_timeout"
                                 type="number"
-                                min="0"
+                                min="120"
+                                max="300"
                                 value="{{ repeater.get('sql_timeout', 180) }}"
                             >
-
-                            <br><br>
-
-                            <label for="port_{{ port_id }}_open_on_sql">Open on SQL, milliseconds</label>
-                            <input
-                                id="port_{{ port_id }}_open_on_sql"
-                                name="port_{{ port_id }}_open_on_sql"
-                                type="number"
-                                min="0"
-                                value="{{ repeater.get('open_on_sql', 200) }}"
-                            >
-
-                            <br><br>
+                            <div class="note">
+                                The permitted duration of one continuous
+                                received transmission, or “over”. The timer
+                                starts when the squelch opens. At the limit,
+                                a warning pip is mixed with the outgoing
+                                audio without cutting it off.
+                                <br><br>
+                                When the received signal ends, SvxLink
+                                announces “Timeout”, plays the configured
+                                courtesy sound and resets the counter.
+                                Default 180 seconds.
+                            </div>
+                            <br>
 
                         {% else %}
                             <span class="warning-text">

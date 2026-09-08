@@ -1981,66 +1981,87 @@ def port_repeater_page():
         if nodes.get(port_id, {}).get("role") == "repeater"
     ]
 
-    if request.method == "POST":
-        for port_id in repeater_port_ids:
-            node = nodes.get(port_id, {})
+    error = None
 
+    if request.method == "POST":
+        validated_repeater_values = {}
+
+        for port_id in repeater_port_ids:
             idle_timeout = request.form.get(
                 f"port_{port_id}_idle_timeout",
-                "10"
+                "10",
             ).strip()
-
             sql_timeout = request.form.get(
                 f"port_{port_id}_sql_timeout",
-                "180"
-            ).strip()
-
-            open_on_sql = request.form.get(
-                f"port_{port_id}_open_on_sql",
-                "200"
+                "180",
             ).strip()
 
             try:
-                idle_timeout_value = int(idle_timeout)
+                idle_timeout_value = int(
+                    idle_timeout
+                )
+                sql_timeout_value = int(
+                    sql_timeout
+                )
             except ValueError:
-                idle_timeout_value = 10
+                error = (
+                    f"Port {port_id}: timeout values "
+                    "must be numeric."
+                )
+                break
 
-            try:
-                sql_timeout_value = int(sql_timeout)
-            except ValueError:
-                sql_timeout_value = 180
+            if not 0 <= idle_timeout_value <= 10:
+                error = (
+                    f"Port {port_id}: idle timeout must "
+                    "be between 0 and 10 seconds."
+                )
+                break
 
-            try:
-                open_on_sql_value = int(open_on_sql)
-            except ValueError:
-                open_on_sql_value = 200
+            if not 120 <= sql_timeout_value <= 300:
+                error = (
+                    f"Port {port_id}: SQL timeout must "
+                    "be between 120 and 300 seconds."
+                )
+                break
 
-            node["repeater"] = {
+            validated_repeater_values[port_id] = {
                 "idle_timeout": idle_timeout_value,
                 "sql_timeout": sql_timeout_value,
-                "open_on_sql": open_on_sql_value,
-                "open_sql_flank": "OPEN",
             }
 
-            node["repeater_configured"] = True
-            nodes[port_id] = node
-
-        for port_id in enabled_port_ids:
-            node = nodes.get(port_id, {})
-            if node.get("role") != "repeater":
+        if error is None:
+            for port_id, values in (
+                validated_repeater_values.items()
+            ):
+                node = nodes.get(port_id, {})
+                repeater = node.setdefault(
+                    "repeater",
+                    {},
+                )
+                repeater.update(values)
+                repeater.pop("open_on_sql", None)
+                repeater.pop("open_sql_flank", None)
                 node["repeater_configured"] = True
                 nodes[port_id] = node
 
-        model["nodes"] = nodes
+            for port_id in enabled_port_ids:
+                node = nodes.get(port_id, {})
 
-        model.setdefault("build", {})
-        model["build"]["port_repeater_configured"] = True
+                if node.get("role") != "repeater":
+                    node["repeater_configured"] = True
+                    nodes[port_id] = node
 
-        save_node_model(model)
+            model["nodes"] = nodes
+            model.setdefault("build", {})
+            model["build"][
+                "port_repeater_configured"
+            ] = True
 
-        return redirect_after_port_configuration(
-            "installation_identity_page"
-        )
+            save_node_model(model)
+
+            return redirect_after_port_configuration(
+                "installation_identity_page"
+            )
 
     return render_template(
         "port_repeater.html",
@@ -2048,6 +2069,7 @@ def port_repeater_page():
         nodes=nodes,
         enabled_ports=enabled_ports,
         repeater_port_ids=repeater_port_ids,
+        error=error,
         version_info=get_version_info(),
     )
 @app.route("/installation-identity", methods=["GET", "POST"])
@@ -3831,46 +3853,28 @@ def repeater_page():
             "down_tone": "biboop",
         }
 
-    if "online_control" not in model:
-        model["online_control"] = {
-            "enabled": False,
-            "command": "998877",
-        }
-
     if request.method == "POST":
-        print("REPEATER FORM:", dict(request.form), flush=True)
         try:
             idle_timeout = int(request.form.get("idle_timeout", "10"))
             sql_timeout = int(request.form.get("sql_timeout", "180"))
         except ValueError:
             error = "Timeout values must be numeric."
         else:
-            online_enabled = request.form.get("online_enabled") == "yes"
-            online_command = request.form.get("online_command", "").strip()
 
-            if idle_timeout < 1 or idle_timeout > 20:
-                error = "Idle timeout must be between 1 and 20 seconds."
+            if idle_timeout < 0 or idle_timeout > 10:
+                error = (
+                    "Idle timeout must be between 0 and "
+                    "10 seconds."
+                )
 
             elif sql_timeout < 120 or sql_timeout > 300:
                 error = "SQL timeout must be between 120 and 300 seconds."
-
-            elif online_enabled and not (
-                online_command.isdigit()
-                and len(online_command) == 6
-                and online_command[0] in "34567"
-            ):
-                error = "Online control command must be six digits and begin with 3, 4, 5, 6, or 7."
 
             else:
                 repeater = model.setdefault("repeater", {})
                 repeater["idle_timeout"] = idle_timeout
                 repeater["sql_timeout"] = sql_timeout
                 model["repeater"] = repeater
-
-                model["online_control"] = {
-                    "enabled": online_enabled,
-                    "command": online_command or "998877",
-                }
 
                 save_node_model(model)
                 if request.form.get("reconfigure") == "1":

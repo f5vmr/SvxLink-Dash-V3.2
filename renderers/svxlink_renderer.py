@@ -190,22 +190,21 @@ def ident_enabled(mode, ident_type):
 # Online control block
 # =========================================================
 
-def render_online_control(model):
+def render_online_control():
     """
-    Render ONLINE control block if enabled.
+    Retain the manual DTMF online/offline control reference
+    in every generated logic section.
     """
-
-    online = model.get("online_control", {})
-
-    if not online.get("enabled"):
-        return ""
-
-    cmd = online.get("command")
-
-    return (
-        f"ONLINE_CMD={cmd}\n"
-        "ONLINE=1"
-    )
+    return "\n".join([
+        "# Emergency DTMF logic control.",
+        "# Replace XXXXXX with a private six-digit command.",
+        "# Enter XXXXXX0# to take this logic offline.",
+        "# Enter XXXXXX1# to return this logic online.",
+        "# Prefix the command with * if a module is active.",
+        "# DTMF muting prevents the digits being retransmitted.",
+        "#ONLINE_CMD=XXXXXX",
+        "#ONLINE=1",
+    ])
 
 
 # =========================================================
@@ -247,26 +246,33 @@ def render_tx_ctcss_logic(model):
 
     return "#TX_CTCSS=ALWAYS"
 
-def render_open_on_ctcss_line(model):
+def render_open_on_ctcss_line(squelch):
     """
-    Render OPEN_ON_CTCSS for repeater logic only when CTCSS is used.
-
-    For non-CTCSS squelch methods, leave it commented.
+    Enable CTCSS opening only when CTCSS is the active SQL
+    detector with a configured frequency.
     """
+    if (
+        squelch.get("method") == "ctcss"
+        and squelch.get("ctcss_freq")
+    ):
+        return "OPEN_ON_CTCSS=200"
 
-    node_type = model.get("node", {}).get("type")
-    squelch = model.get("squelch", {})
+    return "#OPEN_ON_CTCSS=200"
 
-    if node_type != "repeater":
-        return "#OPEN_ON_CTCSS=1000"
 
-    if squelch.get("method") != ("ctcss"):
-        return "#OPEN_ON_CTCSS=1000"
+def render_open_on_sql_line(squelch):
+    """
+    Enable ordinary SQL opening for physical state detectors.
+    CTCSS provides its own opening condition.
+    """
+    if squelch.get("method") in {
+        "hidraw",
+        "gpiod",
+        "serial",
+    }:
+        return "OPEN_ON_SQL=200"
 
-    if not squelch.get("ctcss_freq"):
-        return "#OPEN_ON_CTCSS=1000"
-
-    return "OPEN_ON_CTCSS=600"
+    return "#OPEN_ON_SQL=200"
 
 # =========================================================
 # RX rendering
@@ -774,7 +780,7 @@ def render_active_logic(model):
     short_ident = model.get("ident", {}).get("short", {})
     long_ident = model.get("ident", {}).get("long", {})
     tones = get_installation_tones(model)
-
+    repeater = model.get("repeater", {})
     values = {
         "LOGIC_NAME": logic_name,
         "RX_NAME": "Rx1",
@@ -812,7 +818,11 @@ def render_active_logic(model):
         "CW_CPM": model.get("cw", {}).get("cpm", 95),
 
         "DEFAULT_LANG": get_default_language(model),
-
+        "RGR_SOUND_DELAY": (
+            200
+            if tones["courtesy_mode"] != "none"
+            else 0
+        ),
         "RGR_SOUND_ALWAYS": (
             1 if tones["courtesy_mode"] != "none" else 0
         ),
@@ -822,13 +832,23 @@ def render_active_logic(model):
         "FX_GAIN_NORMAL": model.get("fx_gain_normal", 0),
         "FX_GAIN_LOW": model.get("fx_gain_low", -12),
 
-        "ONLINE_CONTROL_BLOCK": render_online_control(model),
+        "ONLINE_CONTROL_BLOCK": render_online_control(),
         "DTMF_CTRL_PTY": get_dtmf_ctrl_pty(model),
-        "IDLE_TIMEOUT": model.get("idle_timeout", 10),
-        "OPEN_ON_CTCSS_LINE": render_open_on_ctcss_line(model),
-        "REPEATER_SQL_TIMEOUT": model.get("sql_timeout", 180),
+        "IDLE_TIMEOUT": repeater.get(
+            "idle_timeout",
+            10,
+        ),
+        "OPEN_ON_CTCSS_LINE": render_open_on_ctcss_line(
+            model.get("squelch", {})
+        ),
+        "OPEN_ON_SQL_LINE": render_open_on_sql_line(
+            model.get("squelch", {})
+        ),
+        "REPEATER_SQL_TIMEOUT": repeater.get(
+            "sql_timeout",
+            180,
+        ),
     }
-
     if node_type == "repeater":
         return render_config_template(
             "repeater_logic.template",
@@ -885,7 +905,11 @@ def render_port_logic(model, port_id, node):
         "CW_CPM": cw.get("cpm", 95),
 
         "DEFAULT_LANG": get_default_language(model),
-
+        "RGR_SOUND_DELAY": (
+            200
+            if tones["courtesy_mode"] != "none"
+            else 0
+        ),
         "RGR_SOUND_ALWAYS": (
             1 if tones["courtesy_mode"] != "none" else 0
         ),
@@ -896,11 +920,16 @@ def render_port_logic(model, port_id, node):
         "FX_GAIN_NORMAL": model.get("fx_gain_normal", 0),
         "FX_GAIN_LOW": model.get("fx_gain_low", -12),
 
-        "ONLINE_CONTROL_BLOCK": "",
+        "ONLINE_CONTROL_BLOCK": render_online_control(),
         "DTMF_CTRL_PTY": f"/dev/shm/port{port_id}_dtmf_ctrl",
 
         "IDLE_TIMEOUT": repeater.get("idle_timeout", 10),
-        "OPEN_ON_CTCSS_LINE": "",
+        "OPEN_ON_CTCSS_LINE": render_open_on_ctcss_line(
+            node.get("squelch", {})
+        ),
+        "OPEN_ON_SQL_LINE": render_open_on_sql_line(
+            node.get("squelch", {})
+        ),
         "REPEATER_SQL_TIMEOUT": repeater.get("sql_timeout", 180),
     }
 

@@ -246,10 +246,7 @@ DEFAULT_MODEL = {
     "tx_delay": 500,
     "tg_timeout": 60,
     "tx_ctcss_mode": "ALWAYS",
-    "online_control": {
-        "enabled": False,
-        "command": None,
-    },
+
     "tones": {
         "courtesy_mode": "none",
         "courtesy_frequency": 800,

@@ -457,6 +457,7 @@ def migrate_node_model(model):
     return True
 
 def save_node_model(model):
+    model.pop("online_control", None)
     normalise_port_ids(model)
     clean_stale_topology_ports(model)
     ensure_config_dir()
