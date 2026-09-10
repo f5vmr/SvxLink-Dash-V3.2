@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Simple template engine for SvxLink-Dash-V3.1.
+Simple template engine for SvxLink-Dash-V3.2.
 
 Purpose:
 - load framework-owned config templates

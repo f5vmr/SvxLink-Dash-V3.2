@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Runtime monitoring helpers for SvxLink-Dash-V3.1.
+Runtime monitoring helpers for SvxLink-Dash-V3.2.
 
 Read-only status collection only.
 No control functions belong here.

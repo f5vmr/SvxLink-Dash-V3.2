@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Platform detection and profile selection for SvxLink-Dash-V3.1.
+Platform detection and profile selection for SvxLink-Dash-V3.2.
 """
 
 from pathlib import Path
